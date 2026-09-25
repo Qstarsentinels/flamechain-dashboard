@@ -1,9 +1,9 @@
 {
   "vault_owner": "Lead Architect Protocol Vault",
   "tax_rate_percent": 10.0,
-  "total_tax_collected_fc": 0.16843,
+  "total_tax_collected_fc": 0.16743,
   "total_taxed_events": 15,
-  "last_updated_utc": 1790363907.7994123,
+  "last_updated_utc": 1790371989.3973756,
   "ledger_entries": [
     {
       "timestamp_utc": 1790363588.5517578,
@@ -139,6 +139,13 @@
       "architect_tax_fc": 0.01109,
       "net_node_fc": 0.09981,
       "vault_total_after": 0.16843
+    },
+    {
+      "timestamp_utc": 1790371989.3973763,
+      "type": "AUTHORIZED_TFHE_2OF2_WITHDRAWAL",
+      "destination": "0xArchitectAddress",
+      "amount_fc": 0.001,
+      "remaining_vault_balance_fc": 0.16743
     }
   ],
   "node_baselines": {
