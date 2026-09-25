@@ -10,6 +10,8 @@ import os
 import sys
 import time
 import json
+import socket
+import struct
 import subprocess
 import hashlib
 import platform
@@ -17,7 +19,62 @@ import signal
 import urllib.request
 import urllib.error
 
-TELEMETRY_ENDPOINT = "http://127.0.0.1:8546/telemetry/submit"
+
+def detect_gateway_ip() -> str:
+    """Auto-detects the local network default gateway IP address."""
+    # Method 1: Linux / Android / Termux /proc/net/route parsing
+    try:
+        if os.path.exists("/proc/net/route"):
+            with open("/proc/net/route", "r") as f:
+                for line in f:
+                    fields = line.strip().split()
+                    if len(fields) >= 3 and fields[1] == '00000000':
+                        gw_hex = fields[2]
+                        gw_ip = socket.inet_ntoa(struct.pack("<L", int(gw_hex, 16)))
+                        if gw_ip != "0.0.0.0":
+                            return gw_ip
+    except Exception:
+        pass
+
+    # Method 2: ip route execution
+    try:
+        res = subprocess.run(["ip", "route"], capture_output=True, text=True)
+        for line in res.stdout.splitlines():
+            if "default via" in line:
+                parts = line.split()
+                idx = parts.index("via")
+                if idx + 1 < len(parts):
+                    return parts[idx + 1]
+    except Exception:
+        pass
+
+    # Method 3: Darwin/iOS netstat routing table lookup
+    try:
+        res = subprocess.run(["netstat", "-rn"], capture_output=True, text=True)
+        for line in res.stdout.splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[0] in ["default", "0.0.0.0"]:
+                gw = parts[1]
+                if gw != "link#0" and gw != "127.0.0.1":
+                    return gw
+    except Exception:
+        pass
+
+    # Method 4: Local socket UDP interface IP fallback
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        # Derive gateway assumption x.x.x.1
+        ip_parts = local_ip.split(".")
+        if len(ip_parts) == 4:
+            return f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}.1"
+    except Exception:
+        pass
+
+    return "127.0.0.1"
+
 
 class HardwareTelemetryEngine:
     """Non-synthetic hardware sampler utilizing sysctl (Darwin/iOS) and POSIX subsystems."""
@@ -146,29 +203,33 @@ class FlameChainNodeRunner:
         self.telemetry = HardwareTelemetryEngine()
         self.shard_manager = HotSwapTensorShardManager(initial_shard_id=1)
         self.running = True
+        self.gateway_ip = detect_gateway_ip()
+        self.telemetry_endpoint = f"http://{self.gateway_ip}:8546/telemetry/submit"
 
     def stop(self, signum, frame):
         print("\n[*] Stopping FlameChain Node Gracefully...")
         self.running = False
 
     def send_telemetry_snapshot(self, payload: dict):
-        """Sends JSON telemetry state payload to server endpoint."""
+        """Sends JSON telemetry state payload to detected gateway endpoint."""
         try:
             data = json.dumps(payload).encode('utf-8')
             req = urllib.request.Request(
-                TELEMETRY_ENDPOINT,
+                self.telemetry_endpoint,
                 data=data,
                 headers={'Content-Type': 'application/json'},
                 method='POST'
             )
             with urllib.request.urlopen(req, timeout=2.0) as response:
                 res = response.read().decode('utf-8')
-                print(f"[HTTP] Telemetry Submit Response (Pulse #{payload['pulse_counter']}): {res}")
+                print(f"[HTTP] Telemetry Submit -> {self.telemetry_endpoint} (Pulse #{payload['pulse_counter']}): {res}")
         except Exception as e:
-            print(f"[HTTP] Telemetry POST warning: {e}")
+            print(f"[HTTP] Telemetry POST Warning ({self.telemetry_endpoint}): {e}")
 
     def run_continuous_loop(self, pulse_interval_sec: float = 3.0, report_frequency: int = 5):
-        print(f"[*] Starting FlameChain Node Loop (Interval: {pulse_interval_sec}s, POST every {report_frequency} pulses)...")
+        print(f"[*] Gateway IP Detected: {self.gateway_ip}")
+        print(f"[*] Target Telemetry Endpoint: {self.telemetry_endpoint}")
+        print(f"[*] FlameChain Loop Active (Interval: {pulse_interval_sec}s, POST every {report_frequency} pulses)...")
         
         signal.signal(signal.SIGINT, self.stop)
         signal.signal(signal.SIGTERM, self.stop)
@@ -188,9 +249,10 @@ class FlameChainNodeRunner:
             shard_stats = self.shard_manager.update_shard_state(compute_stats["payload_hash"])
 
             node_state = {
-                "flamechain_node_id": "flamechain_tab_shard_master",
+                "flamechain_node_id": f"node_tab_{socket.gethostname()}",
                 "timestamp_utc": time.time(),
                 "pulse_counter": pulse_count,
+                "detected_gateway_ip": self.gateway_ip,
                 "hardware_telemetry": {
                     "sysctl_ram": ram_stats,
                     "compute_pulse": compute_stats
@@ -210,7 +272,6 @@ class FlameChainNodeRunner:
                   f"Watt-Hours: {accumulated_wh:.8f} Wh | "
                   f"Shard: {shard_stats['active_shard_id']}")
 
-            # Post snapshot every N pulses
             if pulse_count % report_frequency == 0:
                 self.send_telemetry_snapshot(node_state)
 
