@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FlameChain - Edge Node Distribution, Telemetry & Global State Ledger
+FlameChain - Edge Node Distribution, Telemetry & Auto-Sync Global State Ledger
 File: server.py
 Architect: Lead Systems Architect
 Host: 0.0.0.0
@@ -11,6 +11,7 @@ import os
 import sys
 import json
 import time
+import threading
 import subprocess
 import hashlib
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -22,6 +23,7 @@ TELEMETRY_LOG_FILE = "latest_telemetry.json"
 VAULT_FILE = "architect_vault.json"
 GLOBAL_STATE_FILE = "global_network_state.json"
 TAX_RATE = 0.10  # 10% Architect Tax
+SYNC_INTERVAL_SEC = 30  # Auto-push state to origin main every 30s
 
 
 class ArchitectTaxEngine:
@@ -147,6 +149,39 @@ class GlobalNetworkStateBuilder:
             self.latest_recovery_hash = commit_hash
         except Exception:
             self.latest_recovery_hash = hashlib.sha256(b"genesis_recovery_block").hexdigest()
+
+
+class AutoGitSyncThread(threading.Thread):
+    """Background daemon thread that periodically commits and pushes state updates to main."""
+    
+    def __init__(self, interval_sec: int = SYNC_INTERVAL_SEC):
+        super().__init__(daemon=True)
+        self.interval_sec = interval_sec
+        self.running = True
+
+    def run(self):
+        print(f"[*] Background Git Sync Daemon started (Interval: {self.interval_sec}s)...")
+        while self.running:
+            time.sleep(self.interval_sec)
+            try:
+                # Stage state and dashboard files
+                files_to_stage = ["global_network_state.json", "node_state.json", "architect_vault.json", "latest_telemetry.json", "index.html"]
+                existing_files = [f for f in files_to_stage if os.path.exists(f)]
+                
+                if existing_files:
+                    subprocess.run(["git", "add"] + existing_files, capture_output=True, check=True)
+                    
+                    commit_msg = f"auto(sync): live network state pulse at {int(time.time())}"
+                    res = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True)
+                    
+                    if "nothing to commit" not in res.stdout:
+                        push_res = subprocess.run(["git", "push", "origin", "main"], capture_output=True, text=True)
+                        if push_res.returncode == 0:
+                            print(f"[GIT AUTO-SYNC] Successfully pushed live network state to main branch.")
+                        else:
+                            print(f"[GIT AUTO-SYNC] Warning: Push failed: {push_res.stderr.strip()}")
+            except Exception as e:
+                print(f"[GIT AUTO-SYNC Error] {e}")
 
 
 tax_engine = ArchitectTaxEngine()
@@ -297,10 +332,7 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
                 node_id = telemetry_data.get("flamechain_node_id", f"node_{peer_ip}")
                 pulse = telemetry_data.get("pulse_counter", 0)
 
-                # Process Architect Tax
                 tax_info = tax_engine.process_telemetry_tax(node_id, telemetry_data)
-                
-                # Update Global Mesh State with Peer IP
                 global_state = state_builder.update_node(node_id, peer_ip, telemetry_data, tax_info)
 
                 print(f"[PEER INGEST] Accepted telemetry POST from IP: {peer_ip} | Node: {node_id} | Pulse: #{pulse}")
@@ -340,14 +372,18 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
         sys.stdout.write(f"[{self.log_date_time_string()}] [{self.client_address[0]}] -> {format % args}\n")
 
 def run_server(host: str = HOST, port: int = PORT):
+    # Initialize background git sync daemon thread
+    sync_thread = AutoGitSyncThread(interval_sec=SYNC_INTERVAL_SEC)
+    sync_thread.start()
+
     server_address = (host, port)
     httpd = HTTPServer(server_address, FlameChainDistServer)
     print(f"[*] FlameChain Telemetry & Code Server bound to http://{host}:{port}...")
-    print(f"[*] Accepting cross-origin peer telemetry on http://{host}:{port}/telemetry/submit")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\n[*] Terminating FlameChain Server...")
+        sync_thread.running = False
         httpd.server_close()
 
 if __name__ == "__main__":
