@@ -50,12 +50,10 @@ class ArchitectTaxEngine:
             json.dump(self.state, f, indent=2)
 
     def process_telemetry_tax(self, node_id: str, telemetry: dict) -> dict:
-        """Calculates and deducts 10% tax on incremental minted FC units."""
         economics = telemetry.get("economics", {})
         gross_minted = float(economics.get("minted_flame_units", 0.0))
         pulse_counter = telemetry.get("pulse_counter", 0)
 
-        # Track last processed amount per node
         node_history = self.state.get("node_baselines", {})
         last_gross = float(node_history.get(node_id, 0.0))
 
@@ -70,7 +68,6 @@ class ArchitectTaxEngine:
         architect_tax = round(incremental_mint * TAX_RATE, 6)
         net_reward = round(incremental_mint - architect_tax, 6)
 
-        # Update Vault State
         self.state["total_tax_collected_fc"] = round(self.state["total_tax_collected_fc"] + architect_tax, 6)
         self.state["total_taxed_events"] += 1
         self.state["last_updated_utc"] = time.time()
@@ -89,7 +86,6 @@ class ArchitectTaxEngine:
         }
         
         self.state["ledger_entries"].append(audit_entry)
-        # Cap ledger entries history to last 100 entries
         if len(self.state["ledger_entries"]) > 100:
             self.state["ledger_entries"] = self.state["ledger_entries"][-100:]
 
@@ -142,24 +138,20 @@ class GlobalNetworkStateBuilder:
         return global_state
 
     def recover_from_github_ledger(self):
-        """Reads latest git commit metadata to seed/verify ledger recovery state."""
         try:
             res = subprocess.run(["git", "log", "-1", "--format=%H %ct"], capture_output=True, text=True, check=True)
             commit_hash, commit_time = res.stdout.strip().split()
             self.latest_recovery_hash = commit_hash
-            print(f"[Ledger Recovery] Instantiated baseline state from GitHub commit: {commit_hash[:10]}")
         except Exception:
             self.latest_recovery_hash = hashlib.sha256(b"genesis_recovery_block").hexdigest()
-            print("[Ledger Recovery] Git metadata unavailable. Initialized fallback recovery seed.")
 
 
-# Global singleton instances
 tax_engine = ArchitectTaxEngine()
 state_builder = GlobalNetworkStateBuilder()
 
 
 class FlameChainDistServer(BaseHTTPRequestHandler):
-    """HTTP Request Handler for FlameChain code distribution, telemetry POSTs, and state inspection."""
+    """HTTP Request Handler for FlameChain distribution, telemetry, and live status dashboard."""
     
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -170,6 +162,59 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
         self.send_response(204)
         self._send_cors_headers()
         self.end_headers()
+
+    def generate_dashboard_text(self) -> str:
+        """Renders live state and vault metrics into an formatted terminal table."""
+        global_data = {}
+        if os.path.exists(GLOBAL_STATE_FILE):
+            try:
+                with open(GLOBAL_STATE_FILE, "r") as f:
+                    global_data = json.load(f)
+            except Exception:
+                pass
+
+        vault_data = tax_engine.state
+        nodes = global_data.get("connected_nodes", {})
+        
+        total_gross = global_data.get("total_gross_minted_fc", 0.0)
+        circulating = global_data.get("net_circulating_supply_fc", 0.0)
+        vault_balance = vault_data.get("total_tax_collected_fc", 0.0)
+        total_wh = global_data.get("total_global_watt_hours", 0.0)
+        recovery_hash = global_data.get("latest_commit_recovery", state_builder.latest_recovery_hash)[:12]
+        
+        lines = [
+            "================================================================================",
+            "                        FLAMECHAIN MESH NETWORK DASHBOARD                       ",
+            "================================================================================",
+            f" Network Mode:            ONLINE (Mainnet Alpha)",
+            f" Total Gross Minted FC:   {total_gross:.6f} FC",
+            f" Net Circulating Supply:  {circulating:.6f} FC",
+            f" Architect Vault (10%):   {vault_balance:.6f} FC",
+            f" Global Energy Backing:   {total_wh:.8f} Watt-Hours",
+            f" Active Connected Nodes:  {len(nodes)}",
+            f" GitHub Ledger Commit:    {recovery_hash}",
+            "--------------------------------------------------------------------------------",
+            "                           CONNECTED SHARD HEALTH & NODES                       ",
+            "--------------------------------------------------------------------------------",
+            f"{'NODE ID':<30} | {'SHARD':<6} | {'PULSE':<6} | {'GROSS FC':<12} | {'STATUS'}",
+            "--------------------------------------------------------------------------------"
+        ]
+
+        if not nodes:
+            lines.append(f"{'No active telemetry nodes connected yet.':^80}")
+        else:
+            for nid, ndata in nodes.items():
+                shard_id = ndata.get("active_shard_id", 1)
+                pulse = ndata.get("pulse_counter", 0)
+                gross = ndata.get("gross_minted_fc", 0.0)
+                last_seen = ndata.get("last_seen_utc", 0)
+                
+                status = "HEALTHY" if (time.time() - last_seen) < 30 else "STALE"
+                lines.append(f"{nid:<30} | {shard_id:<6} | {pulse:<6} | {gross:<12.6f} | {status}")
+
+        lines.append("================================================================================")
+        lines.append("")
+        return "\n".join(lines)
 
     def do_GET(self):
         if self.path == "/download/ios_node.py":
@@ -187,6 +232,15 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
                     self.send_error(500, f"Internal Server Error: {str(err)}")
             else:
                 self.send_error(404, f"Source file '{SOURCE_FILE}' not found.")
+
+        elif self.path == "/dashboard":
+            dashboard_output = self.generate_dashboard_text().encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(dashboard_output)))
+            self._send_cors_headers()
+            self.end_headers()
+            self.wfile.write(dashboard_output)
 
         elif self.path == "/state/global":
             if os.path.exists(GLOBAL_STATE_FILE):
@@ -212,19 +266,14 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
             self.wfile.write(resp)
 
         else:
-            self.send_error(404, "Endpoint Not Found.")
+            self.send_error(404, "Endpoint Not Found. Valid routes: /download/ios_node.py, /dashboard, /state/global, /ledger/recover")
 
     def do_HEAD(self):
-        if self.path == "/download/ios_node.py":
-            if os.path.exists(SOURCE_FILE):
-                file_size = os.path.getsize(SOURCE_FILE)
-                self.send_response(200)
-                self.send_header("Content-Type", "text/x-python")
-                self.send_header("Content-Length", str(file_size))
-                self._send_cors_headers()
-                self.end_headers()
-            else:
-                self.send_error(404)
+        if self.path in ["/download/ios_node.py", "/dashboard"]:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8" if self.path == "/dashboard" else "text/x-python")
+            self._send_cors_headers()
+            self.end_headers()
         else:
             self.send_error(404)
 
@@ -235,16 +284,11 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
                 post_body = self.rfile.read(content_length)
                 telemetry_data = json.loads(post_body.decode("utf-8"))
 
-                # Persist raw latest telemetry snapshot
                 with open(TELEMETRY_LOG_FILE, "w") as f:
                     json.dump(telemetry_data, f, indent=2)
 
                 node_id = telemetry_data.get("flamechain_node_id", "unknown_node")
-
-                # Enforce Architect Tax
                 tax_info = tax_engine.process_telemetry_tax(node_id, telemetry_data)
-
-                # Rebuild Global State Ledger
                 global_state = state_builder.update_node(node_id, telemetry_data, tax_info)
 
                 response_payload = {
@@ -282,7 +326,7 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
 def run_server(port: int = PORT):
     server_address = ('', port)
     httpd = HTTPServer(server_address, FlameChainDistServer)
-    print(f"[*] FlameChain Global Server & Architect Tax Engine active on port {port}...")
+    print(f"[*] FlameChain Dashboard & Telemetry Server active on port {port}...")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
