@@ -1,20 +1,20 @@
 {
   "flamechain_network": "Mainnet Alpha",
-  "last_updated_utc": 1790363590.2482145,
+  "last_updated_utc": 1790363907.800265,
   "active_nodes_count": 1,
-  "total_global_watt_hours": 0.00157336,
-  "total_gross_minted_fc": 1.5734,
-  "architect_vault_tax_fc": 0.15734,
-  "net_circulating_supply_fc": 1.41606,
-  "latest_commit_recovery": "fc28877bb1d8429883aedb12bea308da1865f810",
+  "total_global_watt_hours": 0.00168432,
+  "total_gross_minted_fc": 1.6843,
+  "architect_vault_tax_fc": 0.16843,
+  "net_circulating_supply_fc": 1.51587,
+  "latest_commit_recovery": "e0476e6e8b23a13d91c5c236a69fd70c548f418c",
   "connected_nodes": {
     "flamechain_tab_shard_master": {
-      "last_seen_utc": 1790363590.248197,
-      "pulse_counter": 14,
-      "gross_minted_fc": 1.5734,
-      "accumulated_wh": 0.00157336,
+      "last_seen_utc": 1790363907.800246,
+      "pulse_counter": 15,
+      "gross_minted_fc": 1.6843,
+      "accumulated_wh": 0.00168432,
       "active_shard_id": 2,
-      "state_root": "e60cadc23d9d7e16051241d048c8357c8850e70ced26df86c28ee9fb5f815c38"
+      "state_root": "afe6f31cd8a951f117d84fc98ade6ef98a94c872942a9991a14c0345af76ee46"
     }
   }
 }

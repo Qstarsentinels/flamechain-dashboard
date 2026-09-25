@@ -1,9 +1,9 @@
 {
   "vault_owner": "Lead Architect Protocol Vault",
   "tax_rate_percent": 10.0,
-  "total_tax_collected_fc": 0.15734,
-  "total_taxed_events": 14,
-  "last_updated_utc": 1790363590.2476935,
+  "total_tax_collected_fc": 0.16843,
+  "total_taxed_events": 15,
+  "last_updated_utc": 1790363907.7994123,
   "ledger_entries": [
     {
       "timestamp_utc": 1790363588.5517578,
@@ -130,9 +130,18 @@
       "architect_tax_fc": 0.0116,
       "net_node_fc": 0.1044,
       "vault_total_after": 0.15734
+    },
+    {
+      "timestamp_utc": 1790363907.799414,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 15,
+      "gross_incremental_fc": 0.1109,
+      "architect_tax_fc": 0.01109,
+      "net_node_fc": 0.09981,
+      "vault_total_after": 0.16843
     }
   ],
   "node_baselines": {
-    "flamechain_tab_shard_master": 1.5734
+    "flamechain_tab_shard_master": 1.6843
   }
 }

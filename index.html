@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlameChain Singularity Dashboard</title>
+  <style>
+    :root {
+      --bg: #0a0c10;
+      --card-bg: #12161f;
+      --border: #1e2638;
+      --text: #e2e8f0;
+      --accent: #ff4500;
+      --accent-glow: rgba(255, 69, 0, 0.25);
+      --green: #10b981;
+      --cyan: #06b6d4;
+      --dim: #64748b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', Courier, monospace; }
+    body { background: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+
+    header {
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    h1 { color: var(--accent); font-size: 1.5rem; text-shadow: 0 0 10px var(--accent-glow); }
+    .status-badge {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--green);
+      border: 1px solid var(--green);
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pulse-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; animation: pulse 1.5s infinite; }
+
+    @keyframes pulse {
+      0% { opacity: 0.3; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+      100% { opacity: 0.3; transform: scale(0.8); }
+    }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-bottom: 25px; }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 18px;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    .card-title { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 6px; }
+    .card-value { font-size: 1.4rem; font-weight: bold; color: #fff; }
+    .card-value.highlight { color: var(--accent); }
+    .card-value.cyan { color: var(--cyan); }
+    .card-value.green { color: var(--green); }
+
+    .section-title {
+      font-size: 1.1rem;
+      color: var(--cyan);
+      margin-bottom: 12px;
+      border-left: 3px solid var(--cyan);
+      padding-left: 10px;
+    }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+    th, td { border: 1px solid var(--border); padding: 10px; text-align: left; }
+    th { background: rgba(255, 255, 255, 0.03); color: var(--dim); font-weight: normal; }
+    tr:nth-child(even) { background: rgba(255, 255, 255, 0.01); }
+
+    .code-block {
+      background: #05070a;
+      border: 1px solid var(--border);
+      padding: 12px;
+      font-size: 0.8rem;
+      color: #38bdf8;
+      overflow-x: auto;
+      border-radius: 4px;
+    }
+
+    footer {
+      margin-top: 30px;
+      padding-top: 15px;
+      border-top: 1px solid var(--border);
+      color: var(--dim);
+      font-size: 0.75rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <h1>FLAMECHAIN AGI SINGULARITY MESH</h1>
+      <div style="font-size: 0.75rem; color: var(--dim);">Watt-Hour Backed Currency & Edge Tensor Shard Engine</div>
+    </div>
+    <div class="status-badge">
+      <div class="pulse-dot"></div>
+      <span id="sync-status">NETWORK LIVE</span>
+    </div>
+  </header>
+
+  <!-- Key Metrics -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Total Gross Supply</div>
+      <div class="card-value highlight" id="total-gross">0.000000 FC</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Net Circulating Supply</div>
+      <div class="card-value green" id="net-supply">0.000000 FC</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Architect Vault (10% Tax)</div>
+      <div class="card-value cyan" id="vault-tax">0.000000 FC</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Global Watt-Hour Backing</div>
+      <div class="card-value" id="total-wh">0.00000000 Wh</div>
+    </div>
+  </div>
+
+  <!-- Connected Nodes Table -->
+  <div class="card" style="margin-bottom: 25px;">
+    <div class="section-title">Active Mesh Nodes</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Node ID</th>
+          <th>Peer IP</th>
+          <th>Shard ID</th>
+          <th>Pulse #</th>
+          <th>Gross FC</th>
+          <th>Watt-Hours</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="nodes-table-body">
+        <tr><td colspan="7" style="text-align: center; color: var(--dim);">Loading mesh topology...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Live Telemetry Validator Output -->
+  <div class="card">
+    <div class="section-title">Local Validator Telemetry Snapshot (node_state.json)</div>
+    <pre class="code-block" id="telemetry-json">Loading local node pulse state...</pre>
+  </div>
+
+  <footer>
+    FlameChain Singular Currency System &bull; Lead Systems Architect &bull; Port 8546
+  </footer>
+
+  <script>
+    async function fetchJSON(url) {
+      try {
+        const res = await fetch(url + '?t=' + Date.now());
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (e) {
+        return null;
+      }
+    }
+
+    async function updateDashboard() {
+      const globalState = await fetchJSON('global_network_state.json');
+      const nodeState = await fetchJSON('node_state.json');
+
+      if (globalState) {
+        document.getElementById('total-gross').innerText = (globalState.total_gross_minted_fc || 0).toFixed(6) + ' FC';
+        document.getElementById('net-supply').innerText = (globalState.net_circulating_supply_fc || 0).toFixed(6) + ' FC';
+        document.getElementById('vault-tax').innerText = (globalState.architect_vault_tax_fc || 0).toFixed(6) + ' FC';
+        document.getElementById('total-wh').innerText = (globalState.total_global_watt_hours || 0).toFixed(8) + ' Wh';
+
+        const nodesTable = document.getElementById('nodes-table-body');
+        const nodes = globalState.connected_nodes || {};
+        const nodeKeys = Object.keys(nodes);
+
+        if (nodeKeys.length === 0) {
+          nodesTable.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--dim);">No active network nodes reported.</td></tr>';
+        } else {
+          let rows = '';
+          const now = Date.now() / 1000;
+          for (const nid of nodeKeys) {
+            const n = nodes[nid];
+            const isAlive = (now - (n.last_seen_utc || 0)) < 30;
+            const statusTag = isAlive 
+              ? '<span style="color: var(--green);">ONLINE</span>' 
+              : '<span style="color: var(--dim);">STALE</span>';
+
+            rows += `<tr>
+              <td><b>${nid}</b></td>
+              <td>${n.peer_ip || '127.0.0.1'}</td>
+              <td>Shard-${n.active_shard_id || 1}</td>
+              <td>#${n.pulse_counter || 0}</td>
+              <td>${(n.gross_minted_fc || 0).toFixed(6)} FC</td>
+              <td>${(n.accumulated_wh || 0).toFixed(6)} Wh</td>
+              <td>${statusTag}</td>
+            </tr>`;
+          }
+          nodesTable.innerHTML = rows;
+        }
+      }
+
+      if (nodeState) {
+        document.getElementById('telemetry-json').innerText = JSON.stringify(nodeState, null, 2);
+      } else {
+        document.getElementById('telemetry-json').innerText = '// Local node_state.json uninitialized or offline.';
+      }
+    }
+
+    updateDashboard();
+    setInterval(updateDashboard, 2000);
+  </script>
+</body>
+</html>
