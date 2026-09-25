@@ -14,6 +14,7 @@ import time
 import threading
 import subprocess
 import hashlib
+import argparse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 HOST = "0.0.0.0"
@@ -22,8 +23,125 @@ SOURCE_FILE = "ipad_node.py"
 TELEMETRY_LOG_FILE = "latest_telemetry.json"
 VAULT_FILE = "architect_vault.json"
 GLOBAL_STATE_FILE = "global_network_state.json"
+NODE_STATE_FILE = "node_state.json"
 TAX_RATE = 0.10  # 10% Architect Tax
 SYNC_INTERVAL_SEC = 30  # Auto-push state to origin main every 30s
+
+
+def rebuild_genesis_from_git() -> dict:
+    """Auto-detects missing state files and reconstructs ledger state from Git log history."""
+    print("[Genesis Rebuild] Inspecting Git commit ledger for historical pulse recovery...")
+    
+    commit_count = 1
+    latest_hash = "genesis_hash_fallback"
+    latest_time = time.time()
+
+    try:
+        res = subprocess.run(
+            ["git", "log", "--format=%H|%ct|%s"],
+            capture_output=True, text=True, check=True
+        )
+        lines = [line for line in res.stdout.strip().splitlines() if line]
+        if lines:
+            commit_count = len(lines)
+            latest_hash, latest_ct, _ = lines[0].split("|", 2)
+            latest_time = float(latest_ct)
+            print(f"[Genesis Rebuild] Parsed {commit_count} commits. Head: {latest_hash[:10]} at timestamp {latest_time}")
+    except Exception as e:
+        print(f"[Genesis Rebuild Warning] Unable to parse git log: {e}")
+
+    # Calculate baseline supply derived from commit history
+    baseline_wh = round(commit_count * 0.005, 8)
+    gross_minted_fc = round(baseline_wh * 1000.0, 6)
+    architect_tax_fc = round(gross_minted_fc * TAX_RATE, 6)
+    net_circulating_fc = round(gross_minted_fc - architect_tax_fc, 6)
+
+    # 1. Rebuild architect_vault.json if missing
+    if not os.path.exists(VAULT_FILE):
+        vault_data = {
+            "vault_owner": "Lead Architect Protocol Vault",
+            "tax_rate_percent": TAX_RATE * 100,
+            "total_tax_collected_fc": architect_tax_fc,
+            "total_taxed_events": commit_count,
+            "last_updated_utc": time.time(),
+            "node_baselines": {
+                "node_tab_rebuilt_genesis": gross_minted_fc
+            },
+            "ledger_entries": [
+                {
+                    "timestamp_utc": time.time(),
+                    "node_id": "genesis_rebuild_engine",
+                    "pulse_counter": commit_count,
+                    "gross_incremental_fc": gross_minted_fc,
+                    "architect_tax_fc": architect_tax_fc,
+                    "net_node_fc": net_circulating_fc,
+                    "vault_total_after": architect_tax_fc
+                }
+            ]
+        }
+        with open(VAULT_FILE, "w") as f:
+            json.dump(vault_data, f, indent=2)
+        print(f"[Genesis Rebuild] Regenerated '{VAULT_FILE}' cleanly.")
+
+    # 2. Rebuild node_state.json if missing
+    if not os.path.exists(NODE_STATE_FILE):
+        node_data = {
+            "flamechain_node_id": "node_tab_rebuilt_genesis",
+            "timestamp_utc": time.time(),
+            "pulse_counter": commit_count,
+            "detected_gateway_ip": "127.0.0.1",
+            "hardware_telemetry": {
+                "sysctl_ram": {"total_mb": 4096.0, "used_mb": 2048.0, "available_mb": 2048.0, "method": "rebuilt_genesis"},
+                "compute_pulse": {"duration_sec": 0.05, "throughput_mb_sec": 80.0, "payload_hash": latest_hash[:16], "utilization_factor": 0.08}
+            },
+            "economics": {
+                "currency_backing": "Watt-Hours",
+                "accumulated_watt_hours": baseline_wh,
+                "minted_flame_units": gross_minted_fc
+            },
+            "tensor_shard_state": {
+                "active_shard_id": 1,
+                "sequence_number": commit_count,
+                "state_root": hashlib.sha256(f"genesis_rebuild_{latest_hash}".encode()).hexdigest()
+            }
+        }
+        with open(NODE_STATE_FILE, "w") as f:
+            json.dump(node_data, f, indent=2)
+        print(f"[Genesis Rebuild] Regenerated '{NODE_STATE_FILE}' cleanly.")
+
+    # 3. Rebuild global_network_state.json if missing
+    if not os.path.exists(GLOBAL_STATE_FILE):
+        global_data = {
+            "flamechain_network": "Mainnet Alpha",
+            "last_updated_utc": time.time(),
+            "active_nodes_count": 1,
+            "total_global_watt_hours": baseline_wh,
+            "total_gross_minted_fc": gross_minted_fc,
+            "architect_vault_tax_fc": architect_tax_fc,
+            "net_circulating_supply_fc": net_circulating_fc,
+            "latest_commit_recovery": latest_hash,
+            "connected_nodes": {
+                "node_tab_rebuilt_genesis": {
+                    "peer_ip": "127.0.0.1",
+                    "last_seen_utc": time.time(),
+                    "pulse_counter": commit_count,
+                    "gross_minted_fc": gross_minted_fc,
+                    "accumulated_wh": baseline_wh,
+                    "active_shard_id": 1,
+                    "state_root": hashlib.sha256(f"genesis_rebuild_{latest_hash}".encode()).hexdigest()
+                }
+            }
+        }
+        with open(GLOBAL_STATE_FILE, "w") as f:
+            json.dump(global_data, f, indent=2)
+        print(f"[Genesis Rebuild] Regenerated '{GLOBAL_STATE_FILE}' cleanly.")
+
+    print(f"[Genesis Rebuild Complete] Total Supply: {gross_minted_fc:.6f} FC | Vault: {architect_tax_fc:.6f} FC")
+    return {
+        "gross_fc": gross_minted_fc,
+        "vault_fc": architect_tax_fc,
+        "net_fc": net_circulating_fc
+    }
 
 
 class ArchitectTaxEngine:
@@ -164,13 +282,11 @@ class AutoGitSyncThread(threading.Thread):
         while self.running:
             time.sleep(self.interval_sec)
             try:
-                # Stage state and dashboard files
                 files_to_stage = ["global_network_state.json", "node_state.json", "architect_vault.json", "latest_telemetry.json", "index.html"]
                 existing_files = [f for f in files_to_stage if os.path.exists(f)]
                 
                 if existing_files:
                     subprocess.run(["git", "add"] + existing_files, capture_output=True, check=True)
-                    
                     commit_msg = f"auto(sync): live network state pulse at {int(time.time())}"
                     res = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True)
                     
@@ -372,7 +488,13 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
         sys.stdout.write(f"[{self.log_date_time_string()}] [{self.client_address[0]}] -> {format % args}\n")
 
 def run_server(host: str = HOST, port: int = PORT):
-    # Initialize background git sync daemon thread
+    parser = argparse.ArgumentParser(description="FlameChain Global Server & State Engine")
+    parser.add_argument("--rebuild-genesis", action="store_true", help="Auto-detect missing state files and rebuild from Git commit log history")
+    args = parser.parse_args()
+
+    if args.rebuild-genesis:
+        rebuild_genesis_from_git()
+
     sync_thread = AutoGitSyncThread(interval_sec=SYNC_INTERVAL_SEC)
     sync_thread.start()
 
