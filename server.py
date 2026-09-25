@@ -16,25 +16,34 @@ SOURCE_FILE = "ipad_node.py"
 class FlameChainDistServer(BaseHTTPRequestHandler):
     """HTTP Request Handler for FlameChain node code provisioning."""
     
-    def do_GET(self):
+    def _handle_download_request(self, send_body: bool = True):
         if self.path == "/download/ios_node.py":
             if os.path.exists(SOURCE_FILE):
                 try:
-                    with open(SOURCE_FILE, "rb") as f:
-                        payload = f.read()
-                    
+                    file_size = os.path.getsize(SOURCE_FILE)
                     self.send_response(200)
                     self.send_header("Content-Type", "text/x-python")
-                    self.send_header("Content-Length", str(len(payload)))
+                    self.send_header("Content-Length", str(file_size))
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.end_headers()
-                    self.wfile.write(payload)
+                    
+                    if send_body:
+                        with open(SOURCE_FILE, "rb") as f:
+                            self.wfile.write(f.read())
                 except Exception as err:
                     self.send_error(500, f"Internal Server Error: {str(err)}")
             else:
                 self.send_error(404, f"Source payload file '{SOURCE_FILE}' not found on host.")
         else:
             self.send_error(404, "Endpoint Not Found. Valid route: /download/ios_node.py")
+
+    def do_GET(self):
+        """Handle standard HTTP GET request."""
+        self._handle_download_request(send_body=True)
+
+    def do_HEAD(self):
+        """Handle HTTP HEAD request (used by curl -I)."""
+        self._handle_download_request(send_body=False)
 
     def log_message(self, format, *args):
         sys.stdout.write(f"[{self.log_date_time_string()}] {self.client_address[0]} -> {format % args}\n")
