@@ -1,0 +1,30 @@
+{
+  "flamechain_node_id": "node_tab_localhost",
+  "timestamp_utc": 1790365562.8047614,
+  "pulse_counter": 12,
+  "detected_gateway_ip": "172.20.10.1",
+  "hardware_telemetry": {
+    "sysctl_ram": {
+      "total_mb": 3404.2,
+      "available_mb": 510.96,
+      "used_mb": 2893.24,
+      "method": "/proc/meminfo"
+    },
+    "compute_pulse": {
+      "duration_sec": 0.012389,
+      "throughput_mb_sec": 242.15,
+      "payload_hash": "8d140ed9573e6985",
+      "utilization_factor": 0.2422
+    }
+  },
+  "economics": {
+    "currency_backing": "Watt-Hours",
+    "accumulated_watt_hours": 0.00163948,
+    "minted_flame_units": 1.6395
+  },
+  "tensor_shard_state": {
+    "active_shard_id": 2,
+    "sequence_number": 12,
+    "state_root": "a6ba5b19d00d95260fc4d8edcdfb312e6719faae78589b1629c619e974750747"
+  }
+}
