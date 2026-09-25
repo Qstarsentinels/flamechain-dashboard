@@ -3,6 +3,7 @@
 FlameChain - Edge Node Distribution, Telemetry & Global State Ledger
 File: server.py
 Architect: Lead Systems Architect
+Host: 0.0.0.0
 Port: 8546
 """
 
@@ -14,6 +15,7 @@ import subprocess
 import hashlib
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+HOST = "0.0.0.0"
 PORT = 8546
 SOURCE_FILE = "ipad_node.py"
 TELEMETRY_LOG_FILE = "latest_telemetry.json"
@@ -105,8 +107,9 @@ class GlobalNetworkStateBuilder:
         self.nodes = {}
         self.recover_from_github_ledger()
 
-    def update_node(self, node_id: str, telemetry: dict, tax_info: dict) -> dict:
+    def update_node(self, node_id: str, peer_ip: str, telemetry: dict, tax_info: dict) -> dict:
         self.nodes[node_id] = {
+            "peer_ip": peer_ip,
             "last_seen_utc": time.time(),
             "pulse_counter": telemetry.get("pulse_counter", 0),
             "gross_minted_fc": float(telemetry.get("economics", {}).get("minted_flame_units", 0.0)),
@@ -156,7 +159,7 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -164,7 +167,6 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
         self.end_headers()
 
     def generate_dashboard_text(self) -> str:
-        """Renders live state and vault metrics into an formatted terminal table."""
         global_data = {}
         if os.path.exists(GLOBAL_STATE_FILE):
             try:
@@ -186,7 +188,7 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
             "================================================================================",
             "                        FLAMECHAIN MESH NETWORK DASHBOARD                       ",
             "================================================================================",
-            f" Network Mode:            ONLINE (Mainnet Alpha)",
+            f" Network Mode:            ONLINE (Mainnet Alpha - 0.0.0.0:8546)",
             f" Total Gross Minted FC:   {total_gross:.6f} FC",
             f" Net Circulating Supply:  {circulating:.6f} FC",
             f" Architect Vault (10%):   {vault_balance:.6f} FC",
@@ -196,7 +198,7 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
             "--------------------------------------------------------------------------------",
             "                           CONNECTED SHARD HEALTH & NODES                       ",
             "--------------------------------------------------------------------------------",
-            f"{'NODE ID':<30} | {'SHARD':<6} | {'PULSE':<6} | {'GROSS FC':<12} | {'STATUS'}",
+            f"{'NODE ID':<26} | {'PEER IP':<15} | {'SHARD':<5} | {'PULSE':<5} | {'STATUS'}",
             "--------------------------------------------------------------------------------"
         ]
 
@@ -204,19 +206,21 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
             lines.append(f"{'No active telemetry nodes connected yet.':^80}")
         else:
             for nid, ndata in nodes.items():
+                peer_ip = ndata.get("peer_ip", "0.0.0.0")
                 shard_id = ndata.get("active_shard_id", 1)
                 pulse = ndata.get("pulse_counter", 0)
-                gross = ndata.get("gross_minted_fc", 0.0)
                 last_seen = ndata.get("last_seen_utc", 0)
                 
                 status = "HEALTHY" if (time.time() - last_seen) < 30 else "STALE"
-                lines.append(f"{nid:<30} | {shard_id:<6} | {pulse:<6} | {gross:<12.6f} | {status}")
+                lines.append(f"{nid[:26]:<26} | {peer_ip:<15} | {shard_id:<5} | {pulse:<5} | {status}")
 
         lines.append("================================================================================")
         lines.append("")
         return "\n".join(lines)
 
     def do_GET(self):
+        peer_ip = self.client_address[0]
+        
         if self.path == "/download/ios_node.py":
             if os.path.exists(SOURCE_FILE):
                 try:
@@ -228,6 +232,7 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
                     self.end_headers()
                     with open(SOURCE_FILE, "rb") as f:
                         self.wfile.write(f.read())
+                    print(f"[NODE DISCOVERY] Served ios_node.py payload to peer: {peer_ip}")
                 except Exception as err:
                     self.send_error(500, f"Internal Server Error: {str(err)}")
             else:
@@ -266,7 +271,7 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
             self.wfile.write(resp)
 
         else:
-            self.send_error(404, "Endpoint Not Found. Valid routes: /download/ios_node.py, /dashboard, /state/global, /ledger/recover")
+            self.send_error(404, "Endpoint Not Found.")
 
     def do_HEAD(self):
         if self.path in ["/download/ios_node.py", "/dashboard"]:
@@ -278,6 +283,8 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
+        peer_ip = self.client_address[0]
+        
         if self.path == "/telemetry/submit":
             try:
                 content_length = int(self.headers.get("Content-Length", 0))
@@ -287,15 +294,23 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
                 with open(TELEMETRY_LOG_FILE, "w") as f:
                     json.dump(telemetry_data, f, indent=2)
 
-                node_id = telemetry_data.get("flamechain_node_id", "unknown_node")
+                node_id = telemetry_data.get("flamechain_node_id", f"node_{peer_ip}")
+                pulse = telemetry_data.get("pulse_counter", 0)
+
+                # Process Architect Tax
                 tax_info = tax_engine.process_telemetry_tax(node_id, telemetry_data)
-                global_state = state_builder.update_node(node_id, telemetry_data, tax_info)
+                
+                # Update Global Mesh State with Peer IP
+                global_state = state_builder.update_node(node_id, peer_ip, telemetry_data, tax_info)
+
+                print(f"[PEER INGEST] Accepted telemetry POST from IP: {peer_ip} | Node: {node_id} | Pulse: #{pulse}")
 
                 response_payload = {
                     "status": "success",
                     "acknowledged_at": time.time(),
+                    "peer_ip": peer_ip,
                     "node_id": node_id,
-                    "received_pulse": telemetry_data.get("pulse_counter", 0),
+                    "received_pulse": pulse,
                     "architect_tax_applied_fc": tax_info["tax_applied_fc"],
                     "vault_balance_fc": tax_info["total_vault_balance"],
                     "net_circulating_supply_fc": global_state["net_circulating_supply_fc"]
@@ -310,6 +325,7 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
                 self.wfile.write(data_bytes)
 
             except Exception as e:
+                print(f"[PEER ERROR] Failed to process telemetry from IP: {peer_ip} | Error: {e}")
                 err_bytes = json.dumps({"status": "error", "message": str(e)}).encode("utf-8")
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
@@ -321,16 +337,17 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
             self.send_error(404, "Endpoint Not Found.")
 
     def log_message(self, format, *args):
-        sys.stdout.write(f"[{self.log_date_time_string()}] {self.client_address[0]} -> {format % args}\n")
+        sys.stdout.write(f"[{self.log_date_time_string()}] [{self.client_address[0]}] -> {format % args}\n")
 
-def run_server(port: int = PORT):
-    server_address = ('', port)
+def run_server(host: str = HOST, port: int = PORT):
+    server_address = (host, port)
     httpd = HTTPServer(server_address, FlameChainDistServer)
-    print(f"[*] FlameChain Dashboard & Telemetry Server active on port {port}...")
+    print(f"[*] FlameChain Telemetry & Code Server bound to http://{host}:{port}...")
+    print(f"[*] Accepting cross-origin peer telemetry on http://{host}:{port}/telemetry/submit")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n[*] Terminating Server...")
+        print("\n[*] Terminating FlameChain Server...")
         httpd.server_close()
 
 if __name__ == "__main__":
