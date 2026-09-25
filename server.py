@@ -17,6 +17,9 @@ import hashlib
 import argparse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+# Import TFHE Threshold Multisig Engine
+from tfhe_multisig import TFHEVaultMultisig
+
 HOST = "0.0.0.0"
 PORT = 8546
 SOURCE_FILE = "ipad_node.py"
@@ -25,7 +28,9 @@ VAULT_FILE = "architect_vault.json"
 GLOBAL_STATE_FILE = "global_network_state.json"
 NODE_STATE_FILE = "node_state.json"
 TAX_RATE = 0.10  # 10% Architect Tax
-SYNC_INTERVAL_SEC = 30  # Auto-push state to origin main every 30s
+SYNC_INTERVAL_SEC = 30
+
+tfhe_multisig_engine = TFHEVaultMultisig()
 
 
 def rebuild_genesis_from_git() -> dict:
@@ -50,13 +55,11 @@ def rebuild_genesis_from_git() -> dict:
     except Exception as e:
         print(f"[Genesis Rebuild Warning] Unable to parse git log: {e}")
 
-    # Calculate baseline supply derived from commit history
     baseline_wh = round(commit_count * 0.005, 8)
     gross_minted_fc = round(baseline_wh * 1000.0, 6)
     architect_tax_fc = round(gross_minted_fc * TAX_RATE, 6)
     net_circulating_fc = round(gross_minted_fc - architect_tax_fc, 6)
 
-    # 1. Rebuild architect_vault.json if missing
     if not os.path.exists(VAULT_FILE):
         vault_data = {
             "vault_owner": "Lead Architect Protocol Vault",
@@ -83,7 +86,6 @@ def rebuild_genesis_from_git() -> dict:
             json.dump(vault_data, f, indent=2)
         print(f"[Genesis Rebuild] Regenerated '{VAULT_FILE}' cleanly.")
 
-    # 2. Rebuild node_state.json if missing
     if not os.path.exists(NODE_STATE_FILE):
         node_data = {
             "flamechain_node_id": "node_tab_rebuilt_genesis",
@@ -109,7 +111,6 @@ def rebuild_genesis_from_git() -> dict:
             json.dump(node_data, f, indent=2)
         print(f"[Genesis Rebuild] Regenerated '{NODE_STATE_FILE}' cleanly.")
 
-    # 3. Rebuild global_network_state.json if missing
     if not os.path.exists(GLOBAL_STATE_FILE):
         global_data = {
             "flamechain_network": "Mainnet Alpha",
@@ -136,7 +137,6 @@ def rebuild_genesis_from_git() -> dict:
             json.dump(global_data, f, indent=2)
         print(f"[Genesis Rebuild] Regenerated '{GLOBAL_STATE_FILE}' cleanly.")
 
-    print(f"[Genesis Rebuild Complete] Total Supply: {gross_minted_fc:.6f} FC | Vault: {architect_tax_fc:.6f} FC")
     return {
         "gross_fc": gross_minted_fc,
         "vault_fc": architect_tax_fc,
@@ -217,6 +217,27 @@ class ArchitectTaxEngine:
             "net_node_reward_fc": net_reward,
             "total_vault_balance": self.state["total_tax_collected_fc"]
         }
+
+    def execute_authorized_withdrawal(self, amount: float, destination: str) -> dict:
+        """Executes a vault balance deduction after TFHE multisig verification."""
+        if amount <= 0:
+            raise ValueError("Withdrawal amount must be greater than 0.")
+        if self.state["total_tax_collected_fc"] < amount:
+            raise ValueError(f"Insufficient vault balance. Available: {self.state['total_tax_collected_fc']} FC")
+
+        self.state["total_tax_collected_fc"] = round(self.state["total_tax_collected_fc"] - amount, 6)
+        self.state["last_updated_utc"] = time.time()
+
+        withdrawal_record = {
+            "timestamp_utc": time.time(),
+            "type": "AUTHORIZED_TFHE_2OF2_WITHDRAWAL",
+            "destination": destination,
+            "amount_fc": amount,
+            "remaining_vault_balance_fc": self.state["total_tax_collected_fc"]
+        }
+        self.state["ledger_entries"].append(withdrawal_record)
+        self._save_vault()
+        return withdrawal_record
 
 
 class GlobalNetworkStateBuilder:
@@ -305,7 +326,7 @@ state_builder = GlobalNetworkStateBuilder()
 
 
 class FlameChainDistServer(BaseHTTPRequestHandler):
-    """HTTP Request Handler for FlameChain distribution, telemetry, and live status dashboard."""
+    """HTTP Request Handler for FlameChain distribution, telemetry, and TFHE multisig vault transfers."""
     
     def _send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -451,8 +472,6 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
                 tax_info = tax_engine.process_telemetry_tax(node_id, telemetry_data)
                 global_state = state_builder.update_node(node_id, peer_ip, telemetry_data, tax_info)
 
-                print(f"[PEER INGEST] Accepted telemetry POST from IP: {peer_ip} | Node: {node_id} | Pulse: #{pulse}")
-
                 response_payload = {
                     "status": "success",
                     "acknowledged_at": time.time(),
@@ -473,7 +492,6 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
                 self.wfile.write(data_bytes)
 
             except Exception as e:
-                print(f"[PEER ERROR] Failed to process telemetry from IP: {peer_ip} | Error: {e}")
                 err_bytes = json.dumps({"status": "error", "message": str(e)}).encode("utf-8")
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
@@ -481,6 +499,66 @@ class FlameChainDistServer(BaseHTTPRequestHandler):
                 self._send_cors_headers()
                 self.end_headers()
                 self.wfile.write(err_bytes)
+
+        elif self.path == "/vault/withdraw":
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                post_body = self.rfile.read(content_length)
+                req_data = json.loads(post_body.decode("utf-8"))
+
+                amount = float(req_data.get("amount_fc", 0.0))
+                destination = req_data.get("destination", "")
+                sig_galaxy = req_data.get("sig_galaxy_tab", "")
+                sig_iphone = req_data.get("sig_iphone", "")
+
+                print(f"[TFHE VAULT] Evaluating 2-of-2 withdrawal request: {amount} FC -> {destination}")
+
+                # Homomorphic 2-of-2 Threshold Multisig Evaluation
+                passed, eval_details = tfhe_multisig_engine.evaluate_2of2_multisig(
+                    amount, destination, sig_galaxy, sig_iphone
+                )
+
+                if not passed:
+                    print(f"[TFHE MULTISIG REJECTED] Withdrawal denied for IP {peer_ip}. Details: {eval_details}")
+                    err_res = json.dumps({
+                        "status": "rejected",
+                        "error": "TFHE 2-of-2 multisig threshold failed. Requires valid signatures from both Galaxy Tab and iPhone.",
+                        "tfhe_eval_details": eval_details
+                    }).encode("utf-8")
+                    self.send_response(403)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(err_res)))
+                    self._send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(err_res)
+                    return
+
+                # Execute withdrawal upon successful TFHE 2-of-2 verification
+                record = tax_engine.execute_authorized_withdrawal(amount, destination)
+                print(f"[TFHE MULTISIG APPROVED] Deducted {amount} FC from Vault. New balance: {record['remaining_vault_balance_fc']} FC")
+
+                success_res = json.dumps({
+                    "status": "approved",
+                    "tfhe_threshold": "2-of-2 PASSED",
+                    "withdrawal_record": record,
+                    "tfhe_eval_details": eval_details
+                }).encode("utf-8")
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(success_res)))
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(success_res)
+
+            except Exception as e:
+                err_res = json.dumps({"status": "error", "message": str(e)}).encode("utf-8")
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err_res)))
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(err_res)
         else:
             self.send_error(404, "Endpoint Not Found.")
 
@@ -492,7 +570,7 @@ def run_server(host: str = HOST, port: int = PORT):
     parser.add_argument("--rebuild-genesis", action="store_true", help="Auto-detect missing state files and rebuild from Git commit log history")
     args = parser.parse_args()
 
-    if args.rebuild-genesis:
+    if args.rebuild_genesis:
         rebuild_genesis_from_git()
 
     sync_thread = AutoGitSyncThread(interval_sec=SYNC_INTERVAL_SEC)
@@ -501,6 +579,7 @@ def run_server(host: str = HOST, port: int = PORT):
     server_address = (host, port)
     httpd = HTTPServer(server_address, FlameChainDistServer)
     print(f"[*] FlameChain Telemetry & Code Server bound to http://{host}:{port}...")
+    print(f"[*] TFHE 2-of-2 Multisig Vault Protected Route: POST http://{host}:{port}/vault/withdraw")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
