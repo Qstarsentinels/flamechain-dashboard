@@ -14,6 +14,10 @@ import subprocess
 import hashlib
 import platform
 import signal
+import urllib.request
+import urllib.error
+
+TELEMETRY_ENDPOINT = "http://127.0.0.1:8546/telemetry/submit"
 
 class HardwareTelemetryEngine:
     """Non-synthetic hardware sampler utilizing sysctl (Darwin/iOS) and POSIX subsystems."""
@@ -22,12 +26,10 @@ class HardwareTelemetryEngine:
         self.system = platform.system()
         self.last_pulse_time = time.time()
         self.accumulated_watt_hours = 0.0
-        # ARM Edge SoC Baseline: Idle = 1.5W, Peak = 8.5W
         self.IDLE_POWER_WATTS = 1.5
         self.PEAK_POWER_WATTS = 8.5
 
     def get_sysctl_value(self, key: str) -> str:
-        """Executes native sysctl command for iOS/Darwin hardware extraction."""
         try:
             res = subprocess.run(["sysctl", "-n", key], capture_output=True, text=True, check=True)
             return res.stdout.strip()
@@ -35,17 +37,14 @@ class HardwareTelemetryEngine:
             return ""
 
     def get_system_ram(self) -> dict:
-        """Extracts native RAM parameters via sysctl (iOS/macOS) or /proc/meminfo (Linux/Android)."""
         ram_data = {"total_mb": 0.0, "available_mb": 0.0, "used_mb": 0.0, "method": "unknown"}
 
-        # Attempt iOS/Darwin sysctl parsing
         memsize_str = self.get_sysctl_value("hw.memsize")
         if memsize_str and memsize_str.isdigit():
             total_bytes = int(memsize_str)
             ram_data["total_mb"] = round(total_bytes / (1024 * 1024), 2)
             ram_data["method"] = "sysctl_darwin"
             
-            # Estimate available RAM via pages if available
             pagesize_str = self.get_sysctl_value("hw.pagesize")
             pagecount_str = self.get_sysctl_value("vm.page_free_count")
             if pagesize_str.isdigit() and pagecount_str.isdigit():
@@ -56,7 +55,6 @@ class HardwareTelemetryEngine:
             ram_data["used_mb"] = round(ram_data["total_mb"] - ram_data["available_mb"], 2)
             return ram_data
 
-        # Fallback to POSIX /proc/meminfo (Linux/Android/Termux)
         if os.path.exists("/proc/meminfo"):
             mem = {}
             with open("/proc/meminfo", "r") as f:
@@ -75,7 +73,6 @@ class HardwareTelemetryEngine:
             ram_data["method"] = "/proc/meminfo"
             return ram_data
 
-        # Basic OS fallback
         ram_data["total_mb"] = 4096.0
         ram_data["available_mb"] = 2048.0
         ram_data["used_mb"] = 2048.0
@@ -83,10 +80,8 @@ class HardwareTelemetryEngine:
         return ram_data
 
     def execute_compute_load(self, size_mb: int = 4) -> dict:
-        """Runs memory bandwidth + SHA256 compute pulse to simulate tensor shard validation."""
         start_ns = time.perf_counter_ns()
         
-        # Non-synthetic memory read/hash pass
         payload = bytearray(os.urandom(1024 * 64)) * (size_mb * 16)
         hasher = hashlib.sha256()
         chunk_size = 64 * 1024
@@ -98,8 +93,6 @@ class HardwareTelemetryEngine:
         
         duration_sec = (end_ns - start_ns) / 1e9
         mb_per_sec = size_mb / duration_sec if duration_sec > 0 else 0.0
-        
-        # Load utilization factor (0.0 to 1.0)
         utilization = min(1.0, mb_per_sec / 1000.0)
         
         return {
@@ -110,7 +103,6 @@ class HardwareTelemetryEngine:
         }
 
     def compute_watt_hours(self, compute_metrics: dict) -> float:
-        """Calculates active Watt-hours consumed during runtime."""
         now = time.time()
         delta_hours = (now - self.last_pulse_time) / 3600.0
         self.last_pulse_time = now
@@ -132,7 +124,6 @@ class HotSwapTensorShardManager:
         self.state_hash = hashlib.sha256(f"shard_init_{initial_shard_id}".encode()).hexdigest()
 
     def hot_swap_shard(self, new_shard_id: int):
-        """Hot-swaps the operational model shard in-memory without downtime."""
         old_id = self.active_shard_id
         self.active_shard_id = new_shard_id
         self.state_hash = hashlib.sha256(f"swap_{old_id}_to_{new_shard_id}_{time.time()}".encode()).hexdigest()
@@ -160,9 +151,24 @@ class FlameChainNodeRunner:
         print("\n[*] Stopping FlameChain Node Gracefully...")
         self.running = False
 
-    def run_continuous_loop(self, pulse_interval_sec: float = 3.0):
-        print(f"[*] Starting FlameChain Interactive Node Loop (Interval: {pulse_interval_sec}s)...")
-        print("[*] State file path: node_state.json")
+    def send_telemetry_snapshot(self, payload: dict):
+        """Sends JSON telemetry state payload to server endpoint."""
+        try:
+            data = json.dumps(payload).encode('utf-8')
+            req = urllib.request.Request(
+                TELEMETRY_ENDPOINT,
+                data=data,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            with urllib.request.urlopen(req, timeout=2.0) as response:
+                res = response.read().decode('utf-8')
+                print(f"[HTTP] Telemetry Submit Response (Pulse #{payload['pulse_counter']}): {res}")
+        except Exception as e:
+            print(f"[HTTP] Telemetry POST warning: {e}")
+
+    def run_continuous_loop(self, pulse_interval_sec: float = 3.0, report_frequency: int = 5):
+        print(f"[*] Starting FlameChain Node Loop (Interval: {pulse_interval_sec}s, POST every {report_frequency} pulses)...")
         
         signal.signal(signal.SIGINT, self.stop)
         signal.signal(signal.SIGTERM, self.stop)
@@ -171,19 +177,16 @@ class FlameChainNodeRunner:
         while self.running:
             pulse_count += 1
             
-            # Execute hardware load & measure metrics
             compute_stats = self.telemetry.execute_compute_load(size_mb=3)
             ram_stats = self.telemetry.get_system_ram()
             accumulated_wh = self.telemetry.compute_watt_hours(compute_stats)
             
-            # Simulated dynamic hot-swap condition (every 10 pulses)
             if pulse_count % 10 == 0:
                 next_shard = (self.shard_manager.active_shard_id % 4) + 1
                 self.shard_manager.hot_swap_shard(next_shard)
 
             shard_stats = self.shard_manager.update_shard_state(compute_stats["payload_hash"])
 
-            # Construct state update payload
             node_state = {
                 "flamechain_node_id": "flamechain_tab_shard_master",
                 "timestamp_utc": time.time(),
@@ -200,21 +203,22 @@ class FlameChainNodeRunner:
                 "tensor_shard_state": shard_stats
             }
 
-            # Write full telemetry update to node_state.json on every pulse
             with open("node_state.json", "w") as f:
                 json.dump(node_state, f, indent=2)
 
             print(f"[Pulse #{pulse_count}] RAM Used: {ram_stats['used_mb']} MB | "
                   f"Watt-Hours: {accumulated_wh:.8f} Wh | "
-                  f"Shard: {shard_stats['active_shard_id']} | "
-                  f"State: {shard_stats['state_root'][:10]}...")
+                  f"Shard: {shard_stats['active_shard_id']}")
+
+            # Post snapshot every N pulses
+            if pulse_count % report_frequency == 0:
+                self.send_telemetry_snapshot(node_state)
 
             time.sleep(pulse_interval_sec)
 
 if __name__ == "__main__":
     runner = FlameChainNodeRunner()
-    # Execute 3 pulses in batch mode if non-interactive, or continuous if run directly
     if len(sys.argv) > 1 and sys.argv[1] == "--oneshot":
-        runner.run_continuous_loop(pulse_interval_sec=0.5)
+        runner.run_continuous_loop(pulse_interval_sec=0.1, report_frequency=1)
     else:
-        runner.run_continuous_loop(pulse_interval_sec=2.0)
+        runner.run_continuous_loop(pulse_interval_sec=2.0, report_frequency=5)
