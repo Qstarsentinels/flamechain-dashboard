@@ -1,0 +1,138 @@
+{
+  "vault_owner": "Lead Architect Protocol Vault",
+  "tax_rate_percent": 10.0,
+  "total_tax_collected_fc": 0.15734,
+  "total_taxed_events": 14,
+  "last_updated_utc": 1790363590.2476935,
+  "ledger_entries": [
+    {
+      "timestamp_utc": 1790363588.5517578,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 1,
+      "gross_incremental_fc": 0.0236,
+      "architect_tax_fc": 0.00236,
+      "net_node_fc": 0.02124,
+      "vault_total_after": 0.00236
+    },
+    {
+      "timestamp_utc": 1790363588.6894343,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 2,
+      "gross_incremental_fc": 0.1399,
+      "architect_tax_fc": 0.01399,
+      "net_node_fc": 0.12591,
+      "vault_total_after": 0.01635
+    },
+    {
+      "timestamp_utc": 1790363588.8184214,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 3,
+      "gross_incremental_fc": 0.1312,
+      "architect_tax_fc": 0.01312,
+      "net_node_fc": 0.11808,
+      "vault_total_after": 0.02947
+    },
+    {
+      "timestamp_utc": 1790363588.9490473,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 4,
+      "gross_incremental_fc": 0.1187,
+      "architect_tax_fc": 0.01187,
+      "net_node_fc": 0.10683,
+      "vault_total_after": 0.04134
+    },
+    {
+      "timestamp_utc": 1790363589.0762668,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 5,
+      "gross_incremental_fc": 0.1128,
+      "architect_tax_fc": 0.01128,
+      "net_node_fc": 0.10152,
+      "vault_total_after": 0.05262
+    },
+    {
+      "timestamp_utc": 1790363589.2083006,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 6,
+      "gross_incremental_fc": 0.1285,
+      "architect_tax_fc": 0.01285,
+      "net_node_fc": 0.11565,
+      "vault_total_after": 0.06547
+    },
+    {
+      "timestamp_utc": 1790363589.3412335,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 7,
+      "gross_incremental_fc": 0.1268,
+      "architect_tax_fc": 0.01268,
+      "net_node_fc": 0.11412,
+      "vault_total_after": 0.07815
+    },
+    {
+      "timestamp_utc": 1790363589.4679503,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 8,
+      "gross_incremental_fc": 0.1121,
+      "architect_tax_fc": 0.01121,
+      "net_node_fc": 0.10089,
+      "vault_total_after": 0.08936
+    },
+    {
+      "timestamp_utc": 1790363589.5975173,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 9,
+      "gross_incremental_fc": 0.1139,
+      "architect_tax_fc": 0.01139,
+      "net_node_fc": 0.10251,
+      "vault_total_after": 0.10075
+    },
+    {
+      "timestamp_utc": 1790363589.7312844,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 10,
+      "gross_incremental_fc": 0.1128,
+      "architect_tax_fc": 0.01128,
+      "net_node_fc": 0.10152,
+      "vault_total_after": 0.11203
+    },
+    {
+      "timestamp_utc": 1790363589.860361,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 11,
+      "gross_incremental_fc": 0.1112,
+      "architect_tax_fc": 0.01112,
+      "net_node_fc": 0.10008,
+      "vault_total_after": 0.12315
+    },
+    {
+      "timestamp_utc": 1790363589.9957626,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 12,
+      "gross_incremental_fc": 0.1113,
+      "architect_tax_fc": 0.01113,
+      "net_node_fc": 0.10017,
+      "vault_total_after": 0.13428
+    },
+    {
+      "timestamp_utc": 1790363590.1240034,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 13,
+      "gross_incremental_fc": 0.1146,
+      "architect_tax_fc": 0.01146,
+      "net_node_fc": 0.10314,
+      "vault_total_after": 0.14574
+    },
+    {
+      "timestamp_utc": 1790363590.2476952,
+      "node_id": "flamechain_tab_shard_master",
+      "pulse_counter": 14,
+      "gross_incremental_fc": 0.116,
+      "architect_tax_fc": 0.0116,
+      "net_node_fc": 0.1044,
+      "vault_total_after": 0.15734
+    }
+  ],
+  "node_baselines": {
+    "flamechain_tab_shard_master": 1.5734
+  }
+}
