@@ -1,0 +1,32 @@
+{
+  "network_singularity": {
+    "total_active_validators": 1,
+    "aggregate_ram_gb": 4.0,
+    "total_minted_flame": 0.0,
+    "average_watt_hours": 0.0,
+    "total_network_wh": 0.0,
+    "last_agent_sync_timestamp": 1711900000.0
+  },
+  "agents": {
+    "FlameGPT": {
+      "status": "ONLINE",
+      "role": "Mesh Query & Natural Language Interface"
+    },
+    "Sovereign_LLM": {
+      "status": "ACTIVE",
+      "role": "Shard Consensus & Model Weight Synthesis"
+    },
+    "Oracle": {
+      "status": "ONLINE",
+      "role": "Energy Proof Verification & Wh Indexing"
+    },
+    "Alchemist": {
+      "status": "ACTIVE",
+      "role": "FLAME Minting & Vault Liquidity Engine"
+    },
+    "Sentinel": {
+      "status": "GUARDING",
+      "role": "Network Threat Protection & State Integrity"
+    }
+  }
+}
