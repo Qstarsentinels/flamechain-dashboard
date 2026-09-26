@@ -1,132 +1,176 @@
 #!/usr/bin/env python3
 """
-FlameChain iOS Resilient Edge Minting Node
-Mints cryptographic energy pulses, updates local ledger state (node_state.json),
-and attempts transmission to gateway. Falls back to local ledger if offline.
+FlameChain iPad/iOS Validator Node
+Backed by System RAM and Watt-Hour Proof-of-Work / Proof-of-Energy Pulses
 """
 
-import hashlib
-import json
 import os
 import sys
 import time
+import json
+import hashlib
+import platform
+import uuid
+import socket
+import threading
 import urllib.request
 import urllib.error
 
-PRIMARY_GATEWAY = "http://172.20.10.1:8546/telemetry/submit"
-LOCAL_FALLBACK_GATEWAY = "http://127.0.0.1:8546/telemetry/submit"
-NODE_STATE_FILE = "node_state.json"
+# Global Constants
+STATE_FILE = "node_state.json"
+TELEMETRY_URL = "http://localhost:8546"
+SHARD_MODELS = [
+    "shard_0_vision_encoder.bin",
+    "shard_1_language_decoder.bin",
+    "shard_2_audio_spectrogram.bin",
+    "shard_3_spatial_vector.bin"
+]
 
-DEFAULT_NODE_CONFIG = {
-    "node_id": "node_iphone_ios",
-    "device_model": "iPhone 14 Pro (iOS Bridge)",
-    "watt_hours_contributed": 12.45,
-    "ram_allocated_mb": 3072.0,
-    "active_shards": ["shard_llama3_q4_ios"],
-    "minted_balance": 150.0,
-    "total_pulses_minted": 0,
-    "uncommitted_pulses": [],
-    "last_mint_timestamp": 0.0
-}
-
-def load_local_node_state():
-    if not os.path.exists(NODE_STATE_FILE):
-        return DEFAULT_NODE_CONFIG.copy()
-    try:
-        with open(NODE_STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[!] Warning: Could not read {NODE_STATE_FILE} ({e}). Re-initializing state.")
-        return DEFAULT_NODE_CONFIG.copy()
-
-def save_local_node_state(state):
-    temp_file = f"{NODE_STATE_FILE}.tmp"
-    with open(temp_file, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=4)
-    os.replace(temp_file, NODE_STATE_FILE)
-
-def mint_pulse_hash(state):
-    now = time.time()
-    
-    # KeyError safe lookup fallback
-    nonce = state.get("total_pulses_minted", state.get("pulse_counter", 0)) + 1
-    state["total_pulses_minted"] = nonce
-
-    wh_delta = 0.05
-    token_delta = 1.25
-    
-    state["watt_hours_contributed"] = round(state.get("watt_hours_contributed", 0.0) + wh_delta, 4)
-    state["minted_balance"] = round(state.get("minted_balance", 0.0) + token_delta, 4)
-    state["last_mint_timestamp"] = now
-
-    raw_header = f"{state.get('node_id', 'unknown_node')}:{now}:{state['watt_hours_contributed']}:{nonce}"
-    pulse_hash = hashlib.sha256(raw_header.encode("utf-8")).hexdigest()
-
-    pulse_record = {
-        "nonce": nonce,
-        "hash": pulse_hash,
-        "wh_added": wh_delta,
-        "tokens_added": token_delta,
-        "timestamp": now
-    }
-
-    if "uncommitted_pulses" not in state or not isinstance(state["uncommitted_pulses"], list):
-        state["uncommitted_pulses"] = []
-        
-    state["uncommitted_pulses"].append(pulse_record)
-    print(f"[⚡] Minted Pulse #{nonce} | Hash: {pulse_hash[:16]}... | +{wh_delta} Wh | Total: {state['minted_balance']} FLAME")
-    return pulse_record
-
-def attempt_telemetry_post(state):
-    payload = {
-        "node_id": state.get("node_id", "node_iphone_ios"),
-        "device_model": state.get("device_model", "iPhone 14 Pro"),
-        "watt_hours_contributed": state.get("watt_hours_contributed", 0.0),
-        "ram_allocated_mb": state.get("ram_allocated_mb", 3072.0),
-        "active_shards": state.get("active_shards", []),
-        "minted_balance": state.get("minted_balance", 0.0),
-        "total_pulses": state.get("total_pulses_minted", 0),
-        "uncommitted_count": len(state.get("uncommitted_pulses", []))
-    }
-
-    encoded_data = json.dumps(payload).encode("utf-8")
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "FlameChain-iOS-ResilientNode/1.1"
-    }
-
-    targets = [PRIMARY_GATEWAY, LOCAL_FALLBACK_GATEWAY]
-    synced = False
-
-    for target_url in targets:
-        print(f"[->] Transmitting telemetry to gateway: {target_url}...")
-        req = urllib.request.Request(target_url, data=encoded_data, headers=headers, method="POST")
+def get_total_ram_bytes():
+    """Detect total system memory across Android/Termux, iOS, Linux, and macOS."""
+    # Try reading /proc/meminfo (Termux / Android / Linux)
+    if os.path.exists("/proc/meminfo"):
         try:
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                if resp.status == 200:
-                    body = json.loads(resp.read().decode("utf-8"))
-                    print(f"[✔] Gateway Sync SUCCESS ({target_url}): {body.get('message', '200 OK')}")
-                    state["uncommitted_pulses"] = []
-                    synced = True
-                    break
-        except urllib.error.URLError as e:
-            print(f"[!] Target unreachable ({target_url}): {e.reason}")
-        except Exception as e:
-            print(f"[!] Transmission error ({target_url}): {str(e)}")
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        parts = line.split()
+                        return int(parts[1]) * 1024  # kB to bytes
+        except Exception:
+            pass
 
-    if not synced:
-        print(f"[🔒] Gateway unavailable. Preserving {len(state.get('uncommitted_pulses', []))} pulse(s) in local {NODE_STATE_FILE}.")
+    # Try psutil if available
+    try:
+        import psutil
+        return psutil.virtual_memory().total
+    except ImportError:
+        pass
 
-    save_local_node_state(state)
+    # Default fallback estimate (4 GB)
+    return 4 * 1024 * 1024 * 1024
 
-def main():
-    print("======================================================")
-    print("   FlameChain Resilient Edge Node (iOS Engine)       ")
-    print("======================================================")
+def detect_device_specs():
+    """Gather physical node specifications."""
+    arch = platform.machine() or platform.processor() or "arm64"
+    sys_name = platform.system() or "Darwin"
+    node_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname() or "flamechain.node"))
     
-    state = load_local_node_state()
-    mint_pulse_hash(state)
-    attempt_telemetry_post(state)
+    ram_bytes = get_total_ram_bytes()
+    ram_mb = round(ram_bytes / (1024 * 1024), 2)
+
+    return {
+        "node_id": f"node_{node_uuid[:12]}",
+        "architecture": arch,
+        "os_system": sys_name,
+        "total_ram_mb": ram_mb,
+        "timestamp_initialized": time.time()
+    }
+
+def send_telemetry_async(payload):
+    """Fire-and-forget background thread POST request for network state sync."""
+    def _post():
+        try:
+            data = json.dumps(payload).encode('utf-8')
+            req = urllib.request.Request(
+                TELEMETRY_URL,
+                data=data,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            # Short timeout to avoid hanging background threads
+            with urllib.request.urlopen(req, timeout=2.0) as resp:
+                pass
+        except Exception:
+            # Non-blocking telemetry: silently swallow network offline / server down errors
+            pass
+
+    thread = threading.Thread(target=_post, daemon=True)
+    thread.start()
+
+def save_local_state(state):
+    """Atomically persist local node state to state file."""
+    tmp_file = f"{STATE_FILE}.tmp"
+    try:
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+        os.replace(tmp_file, STATE_FILE)
+    except Exception as e:
+        print(f"[!] Warning: Failed to write local state: {e}")
+
+def run_validator():
+    specs = detect_device_specs()
+    print("==================================================")
+    print("       FLAMECHAIN VALIDATOR NODE INITIALIZED       ")
+    print("==================================================")
+    print(f" Node ID      : {specs['node_id']}")
+    print(f" Architecture : {specs['architecture']}")
+    print(f" OS           : {specs['os_system']}")
+    print(f" System RAM   : {specs['total_ram_mb']} MB")
+    print("==================================================\n")
+
+    pulse_count = 0
+    watt_hours_consumed = 0.0
+    active_shard_idx = 0
+    current_shard = SHARD_MODELS[active_shard_idx]
+    last_hash = "0" * 64
+
+    # Baseline estimated power draw (Watts) based on node computation profile
+    baseline_power_watts = 5.5  # Typical mobile SoC load
+
+    print(f"[+] Starting Minting Engine. Initial Active Shard: {current_shard}")
+
+    while True:
+        pulse_start = time.time()
+        pulse_count += 1
+
+        # 1. Check Shard Hot-Swap condition (every 10 pulses)
+        if pulse_count % 10 == 0:
+            active_shard_idx = (active_shard_idx + 1) % len(SHARD_MODELS)
+            current_shard = SHARD_MODELS[active_shard_idx]
+            print(f"\n[🔄 SHARD HOT-SWAP] Switching to Shard ({active_shard_idx + 1}/{len(SHARD_MODELS)}): {current_shard}")
+
+        # 2. Compute Proof-of-Energy SHA-256 Pulse
+        pulse_data = f"{pulse_count}:{last_hash}:{current_shard}:{specs['node_id']}:{pulse_start}"
+        pulse_hash = hashlib.sha256(pulse_data.encode('utf-8')).hexdigest()
+        last_hash = pulse_hash
+
+        # 3. Simulate work and energy delta calculation
+        time.sleep(0.5)  # Pulse duration interval
+        elapsed_seconds = time.time() - pulse_start
+        watt_hours_delta = (baseline_power_watts * elapsed_seconds) / 3600.0
+        watt_hours_consumed += watt_hours_delta
+
+        # 4. Construct current local state object
+        node_state = {
+            "node_specs": specs,
+            "metrics": {
+                "pulse_count": pulse_count,
+                "watt_hours": round(watt_hours_consumed, 6),
+                "active_shard": current_shard,
+                "shard_index": active_shard_idx,
+                "last_pulse_hash": pulse_hash,
+                "last_updated": time.time()
+            }
+        }
+
+        # 5. Persist state locally on every pulse
+        save_local_state(node_state)
+
+        # 6. Non-blocking telemetry update to telemetry server
+        telemetry_payload = {
+            specs["node_id"]: {
+                "specs": specs,
+                "metrics": node_state["metrics"]
+            }
+        }
+        send_telemetry_async(telemetry_payload)
+
+        # Logging output
+        print(f"[⚡ PULSE #{pulse_count:05d}] Hash: {pulse_hash[:16]}... | Wh: {watt_hours_consumed:.6f} | Shard: {current_shard}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        run_validator()
+    except KeyboardInterrupt:
+        print("\n[-] Validator Node shutdown requested. Exiting cleanly.")
+        sys.exit(0)
