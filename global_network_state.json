@@ -1,20 +1,26 @@
 {
-  "flamechain_network": "Mainnet Alpha",
-  "last_updated_utc": 1790363907.800265,
-  "active_nodes_count": 1,
-  "total_global_watt_hours": 0.00168432,
-  "total_gross_minted_fc": 1.6843,
-  "architect_vault_tax_fc": 0.16843,
-  "net_circulating_supply_fc": 1.51587,
-  "latest_commit_recovery": "e0476e6e8b23a13d91c5c236a69fd70c548f418c",
-  "connected_nodes": {
-    "flamechain_tab_shard_master": {
-      "last_seen_utc": 1790363907.800246,
-      "pulse_counter": 15,
-      "gross_minted_fc": 1.6843,
-      "accumulated_wh": 0.00168432,
-      "active_shard_id": 2,
-      "state_root": "afe6f31cd8a951f117d84fc98ade6ef98a94c872942a9991a14c0345af76ee46"
+    "total_gross_supply": 8321.0,
+    "total_watt_hours": 77.4,
+    "total_allocated_ram_mb": 18432.0,
+    "last_updated": 1700000000.0,
+    "nodes": {
+        "node_tab_localhost": {
+            "device_model": "Galaxy Tab S8 (Termux Core)",
+            "watt_hours": 45.0,
+            "ram_allocated_mb": 12288.0,
+            "active_shards": ["master-shard-0", "llama3-shard-1"],
+            "minted_balance": 3500.25,
+            "status": "active",
+            "last_seen": 1700000000.0
+        },
+        "ios_ipad_pro_m2_mesh_01": {
+            "device_model": "iPad Pro M2 (iOS Gateway)",
+            "watt_hours": 32.4,
+            "ram_allocated_mb": 6144.0,
+            "active_shards": ["llama3-8b-shard-00", "llama3-8b-shard-01"],
+            "minted_balance": 4820.75,
+            "status": "active",
+            "last_seen": 1700000000.0
+        }
     }
-  }
 }
