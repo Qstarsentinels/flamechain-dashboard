@@ -13,6 +13,7 @@
             --accent-fire: #ef4444;
             --accent-gold: #f59e0b;
             --accent-cyan: #06b6d4;
+            --accent-purple: #a855f7;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --status-online: #10b981;
@@ -36,7 +37,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
             padding-bottom: 1.25rem;
             border-bottom: 1px solid var(--card-border);
         }
@@ -85,6 +86,54 @@
             0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
             70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .agent-container {
+            margin-bottom: 2rem;
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 0.85rem;
+            padding: 1.25rem;
+        }
+
+        .agent-header {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.85rem;
+            font-weight: 700;
+        }
+
+        .agent-grid {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .agent-pill {
+            background-color: rgba(30, 41, 59, 0.6);
+            border: 1px solid var(--card-border);
+            padding: 0.5rem 0.9rem;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .agent-name {
+            font-weight: 700;
+            color: var(--accent-cyan);
+        }
+
+        .agent-status-badge {
+            background-color: rgba(16, 185, 129, 0.15);
+            color: var(--status-online);
+            padding: 0.15rem 0.45rem;
+            border-radius: 0.3rem;
+            font-size: 0.7rem;
+            font-weight: 700;
         }
 
         .metrics-grid {
@@ -206,6 +255,17 @@
         </div>
     </header>
 
+    <div class="agent-container">
+        <div class="agent-header">Autonomous AGI Agents Active in Singularity Context</div>
+        <div class="agent-grid" id="agent-badges-grid">
+            <div class="agent-pill"><span class="agent-name">FlameGPT</span> <span class="agent-status-badge">ONLINE</span></div>
+            <div class="agent-pill"><span class="agent-name">Sovereign LLM</span> <span class="agent-status-badge">ACTIVE</span></div>
+            <div class="agent-pill"><span class="agent-name">Oracle</span> <span class="agent-status-badge">ONLINE</span></div>
+            <div class="agent-pill"><span class="agent-name">Alchemist</span> <span class="agent-status-badge">ACTIVE</span></div>
+            <div class="agent-pill"><span class="agent-name">Sentinel</span> <span class="agent-status-badge">GUARDING</span></div>
+        </div>
+    </div>
+
     <main>
         <section class="metrics-grid">
             <div class="metric-card">
@@ -262,38 +322,45 @@
     </footer>
 
     <script>
-        const LOCAL_ENDPOINT = '/api/state';
+        const LOCAL_STATE_ENDPOINT = '/api/state';
+        const RAW_STATE_ENDPOINT = '/global_network_state.json';
         const RAW_GITHUB_ENDPOINT = 'https://raw.githubusercontent.com/FlameChain/FlameChain/main/global_network_state.json';
+        const AGENT_CONTEXT_ENDPOINT = '/api/agent-context';
 
-        async function fetchStateFromSource(url) {
+        async function fetchJsonSafely(url) {
             try {
                 const res = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now());
                 if (res.ok) {
-                    const json = await res.json();
-                    return json;
+                    return await res.json();
                 }
             } catch (err) {
-                console.warn(`Source fetch failed for ${url}:`, err);
+                // Silently swallow warning for failover sequence
             }
             return null;
         }
 
-        async function updateDashboard() {
-            // Attempt local server endpoint first, fallback to raw GitHub JSON
-            let stateData = await fetchStateFromSource(LOCAL_ENDPOINT);
+        async function pollTelemetryAndAgents() {
+            // Priority state polling: Local API -> Raw file -> Raw GitHub
+            let stateData = await fetchJsonSafely(LOCAL_STATE_ENDPOINT);
             if (!stateData) {
-                stateData = await fetchStateFromSource(RAW_GITHUB_ENDPOINT);
+                stateData = await fetchJsonSafely(RAW_STATE_ENDPOINT);
+            }
+            if (!stateData) {
+                stateData = await fetchJsonSafely(RAW_GITHUB_ENDPOINT);
             }
 
+            // Fallback state structure if network disconnected
             if (!stateData) {
-                // If both fail, create fallback local shell
                 stateData = { active_nodes: {} };
             }
 
-            renderMetricsAndTable(stateData);
+            // Agent Context polling
+            const agentData = await fetchJsonSafely(AGENT_CONTEXT_ENDPOINT);
+
+            renderDashboard(stateData, agentData);
         }
 
-        function renderMetricsAndTable(state) {
+        function renderDashboard(state, agentCtx) {
             const nodes = state.active_nodes || {};
             const nodeKeys = Object.keys(nodes);
 
@@ -304,7 +371,7 @@
             let tableRowsHtml = '';
 
             if (nodeKeys.length === 0) {
-                tableRowsHtml = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No active validators reported. Node active and syncing...</td></tr>`;
+                tableRowsHtml = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No active validators reported. Node online and initializing...</td></tr>`;
             } else {
                 for (const key of nodeKeys) {
                     const node = nodes[key];
@@ -335,7 +402,7 @@
                 }
             }
 
-            // Fall back to root aggregate values if provided directly
+            // Fall back to root state values if direct sum is 0
             if (totalGrossSupply === 0 && state.total_gross_supply) {
                 totalGrossSupply = parseFloat(state.total_gross_supply);
             }
@@ -357,7 +424,22 @@
             document.getElementById('nodes-table-body').innerHTML = tableRowsHtml;
             document.getElementById('last-sync-time').innerText = 'Last sync: ' + new Date().toLocaleTimeString();
 
-            // Status Badge
+            // Render Agent Context Badges
+            if (agentCtx && agentCtx.agents) {
+                let agentHtml = '';
+                for (const [agentName, info] of Object.entries(agentCtx.agents)) {
+                    const statusText = info.status || 'ONLINE';
+                    agentHtml += `
+                        <div class="agent-pill">
+                            <span class="agent-name">${agentName}</span>
+                            <span class="agent-status-badge">${statusText}</span>
+                        </div>
+                    `;
+                }
+                document.getElementById('agent-badges-grid').innerHTML = agentHtml;
+            }
+
+            // Update Badge Status Box
             const statusText = document.getElementById('network-status-text');
             const statusBox = document.getElementById('network-badge-box');
             const pulseDot = document.getElementById('pulse-dot-indicator');
@@ -369,9 +451,9 @@
             pulseDot.style.backgroundColor = '#10b981';
         }
 
-        // Initial trigger and continuous 3-second polling loop
-        updateDashboard();
-        setInterval(updateDashboard, 3000);
+        // Trigger on load & poll every 3 seconds
+        pollTelemetryAndAgents();
+        setInterval(pollTelemetryAndAgents, 3000);
     </script>
 </body>
 </html>
