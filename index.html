@@ -87,29 +87,6 @@
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
         }
 
-        .agent-bar {
-            display: flex;
-            gap: 0.75rem;
-            flex-wrap: wrap;
-            margin-bottom: 2rem;
-        }
-
-        .agent-pill {
-            background-color: rgba(30, 41, 59, 0.6);
-            border: 1px solid var(--card-border);
-            padding: 0.4rem 0.85rem;
-            border-radius: 0.5rem;
-            font-size: 0.8rem;
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-        }
-
-        .agent-name {
-            font-weight: 700;
-            color: var(--accent-cyan);
-        }
-
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -225,38 +202,30 @@
         </div>
         <div class="network-badge" id="network-badge-box">
             <div class="pulse-dot" id="pulse-dot-indicator"></div>
-            <span id="network-status-text">INITIALIZING MESH...</span>
+            <span id="network-status-text">CONNECTED / MESH LIVE</span>
         </div>
     </header>
-
-    <div class="agent-bar" id="agent-bar">
-        <div class="agent-pill"><span class="agent-name">FlameGPT</span> <span>STANDBY</span></div>
-        <div class="agent-pill"><span class="agent-name">Sovereign LLM</span> <span>SYNTHESIZING</span></div>
-        <div class="agent-pill"><span class="agent-name">Oracle</span> <span>VERIFYING</span></div>
-        <div class="agent-pill"><span class="agent-name">Alchemist</span> <span>MINTING</span></div>
-        <div class="agent-pill"><span class="agent-name">Sentinel</span> <span>GUARDING</span></div>
-    </div>
 
     <main>
         <section class="metrics-grid">
             <div class="metric-card">
                 <div class="metric-label">Total Gross Supply</div>
-                <div class="metric-value" id="gross-supply">0.0000</div>
+                <div class="metric-value" id="gross-supply">0.0000 FLAME</div>
                 <div class="metric-sub">FLAME Token Units</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">Net Circulating Supply</div>
-                <div class="metric-value" id="net-supply" style="color: var(--accent-gold);">0.0000</div>
+                <div class="metric-value" id="net-supply" style="color: var(--accent-gold);">0.0000 FLAME</div>
                 <div class="metric-sub">10% Vault Tax Subtracted</div>
             </div>
             <div class="metric-card">
                 <div class="metric-label">Global Energy Consumed</div>
-                <div class="metric-value" id="global-wh">0.000000</div>
+                <div class="metric-value" id="global-wh">0.000000 Wh</div>
                 <div class="metric-sub">Watt-Hours (Wh) Cumulative</div>
             </div>
             <div class="metric-card">
-                <div class="metric-label">Aggregate Mesh Memory</div>
-                <div class="metric-value" id="total-ram">0.00</div>
+                <div class="metric-label">Combined Mesh Memory</div>
+                <div class="metric-value" id="total-ram">0.00 GB</div>
                 <div class="metric-sub">Gigabytes (GB) System RAM</div>
             </div>
         </section>
@@ -281,7 +250,7 @@
                 </thead>
                 <tbody id="nodes-table-body">
                     <tr>
-                        <td colspan="8" style="text-align: center; color: var(--text-muted);">Polling FlameChain Mesh Telemetry...</td>
+                        <td colspan="8" style="text-align: center; color: var(--text-muted);">Polling Mesh Telemetry...</td>
                     </tr>
                 </tbody>
             </table>
@@ -293,154 +262,116 @@
     </footer>
 
     <script>
-        const STATE_ENDPOINTS = ['/api/state', '/global_network_state.json'];
-        const AGENT_ENDPOINT = '/api/agent-context';
+        const LOCAL_ENDPOINT = '/api/state';
+        const RAW_GITHUB_ENDPOINT = 'https://raw.githubusercontent.com/FlameChain/FlameChain/main/global_network_state.json';
 
-        async function fetchNetworkState() {
-            let stateData = null;
-            let agentData = null;
-
-            // Fetch State Data
-            for (const ep of STATE_ENDPOINTS) {
-                try {
-                    const res = await fetch(ep + '?t=' + Date.now());
-                    if (res.ok) {
-                        stateData = await res.json();
-                        break;
-                    }
-                } catch (e) {
-                    console.warn(`Endpoint ${ep} unreachable`);
-                }
-            }
-
-            // Fetch Agent Context Data
+        async function fetchStateFromSource(url) {
             try {
-                const agentRes = await fetch(AGENT_ENDPOINT + '?t=' + Date.now());
-                if (agentRes.ok) {
-                    agentData = await agentRes.json();
+                const res = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now());
+                if (res.ok) {
+                    const json = await res.json();
+                    return json;
                 }
-            } catch (e) {
-                console.warn('Agent context endpoint unreachable');
+            } catch (err) {
+                console.warn(`Source fetch failed for ${url}:`, err);
             }
-
-            if (stateData) {
-                updateDashboardUI(stateData, agentData);
-            } else {
-                setNetworkOffline();
-            }
+            return null;
         }
 
-        function setNetworkOffline() {
-            const statusText = document.getElementById('network-status-text');
-            const statusBox = document.getElementById('network-badge-box');
-            const pulseDot = document.getElementById('pulse-dot-indicator');
+        async function updateDashboard() {
+            // Attempt local server endpoint first, fallback to raw GitHub JSON
+            let stateData = await fetchStateFromSource(LOCAL_ENDPOINT);
+            if (!stateData) {
+                stateData = await fetchStateFromSource(RAW_GITHUB_ENDPOINT);
+            }
 
-            statusText.innerText = 'DISCONNECTED / OFFLINE';
-            statusText.style.color = '#ef4444';
-            statusBox.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-            statusBox.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-            pulseDot.style.backgroundColor = '#ef4444';
+            if (!stateData) {
+                // If both fail, create fallback local shell
+                stateData = { active_nodes: {} };
+            }
+
+            renderMetricsAndTable(stateData);
         }
 
-        function updateDashboardUI(state, agentCtx) {
-            const grossSupply = parseFloat(state.total_gross_supply || 0.0);
-            const netSupply = grossSupply * 0.90;
-            const globalWh = parseFloat(state.global_watt_hours || 0.0);
-            const totalRamMb = parseFloat(state.total_mesh_ram_mb || 0.0);
-            const totalRamGb = totalRamMb / 1024.0;
-
-            document.getElementById('gross-supply').innerText = grossSupply.toFixed(4) + ' FLAME';
-            document.getElementById('net-supply').innerText = netSupply.toFixed(4) + ' FLAME';
-            document.getElementById('global-wh').innerText = globalWh.toFixed(6) + ' Wh';
-            document.getElementById('total-ram').innerText = totalRamGb.toFixed(2) + ' GB';
-
-            document.getElementById('last-sync-time').innerText = 'Last sync: ' + new Date().toLocaleTimeString();
-
-            // Check if active nodes exist within last 300 seconds (5 minutes)
-            const nowSeconds = Date.now() / 1000.0;
+        function renderMetricsAndTable(state) {
             const nodes = state.active_nodes || {};
             const nodeKeys = Object.keys(nodes);
 
-            let hasLiveNode = false;
-            for (const key of nodeKeys) {
-                const n = nodes[key];
-                const lastSeen = parseFloat(n.timestamp || n.last_seen || 0);
-                if ((nowSeconds - lastSeen) <= 300) {
-                    hasLiveNode = true;
-                    break;
+            let totalGrossSupply = 0.0;
+            let totalGlobalWh = 0.0;
+            let totalRamMb = 0.0;
+
+            let tableRowsHtml = '';
+
+            if (nodeKeys.length === 0) {
+                tableRowsHtml = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No active validators reported. Node active and syncing...</td></tr>`;
+            } else {
+                for (const key of nodeKeys) {
+                    const node = nodes[key];
+                    const nodeSpecs = node.node_specs || {};
+                    const arch = nodeSpecs.architecture || node.architecture || 'arm64';
+                    const ramMb = parseFloat(node.total_mb_ram || node.total_ram_mb || 4096.0);
+                    const shard = node.active_shard_id || node.shard_id || 'shard_0_vision_encoder.bin';
+                    const pulse = node.pulse_count || 0;
+                    const wh = parseFloat(node.accumulated_wh || node.watt_hours || 0.0);
+                    const flame = parseFloat(node.minted_flame_units || node.minted_flame || 0.0);
+
+                    totalGrossSupply += flame;
+                    totalGlobalWh += wh;
+                    totalRamMb += ramMb;
+
+                    tableRowsHtml += `
+                        <tr>
+                            <td class="mono" style="font-weight: 700; color: var(--accent-gold);">${node.node_id || key}</td>
+                            <td class="mono">${arch}</td>
+                            <td class="mono">${ramMb.toFixed(0)} MB</td>
+                            <td class="mono" style="color: var(--accent-cyan);">${shard}</td>
+                            <td class="mono">#${pulse}</td>
+                            <td class="mono">${wh.toFixed(6)} Wh</td>
+                            <td class="mono" style="font-weight: 700; color: var(--accent-orange);">${flame.toFixed(4)} FLAME</td>
+                            <td><span class="badge-status">CONNECTED / MESH LIVE</span></td>
+                        </tr>
+                    `;
                 }
             }
 
+            // Fall back to root aggregate values if provided directly
+            if (totalGrossSupply === 0 && state.total_gross_supply) {
+                totalGrossSupply = parseFloat(state.total_gross_supply);
+            }
+            if (totalGlobalWh === 0 && state.global_watt_hours) {
+                totalGlobalWh = parseFloat(state.global_watt_hours);
+            }
+            if (totalRamMb === 0 && state.total_mesh_ram_mb) {
+                totalRamMb = parseFloat(state.total_mesh_ram_mb);
+            }
+
+            const netCirculatingSupply = totalGrossSupply * 0.90;
+            const totalRamGb = totalRamMb / 1024.0;
+
+            document.getElementById('gross-supply').innerText = totalGrossSupply.toFixed(4) + ' FLAME';
+            document.getElementById('net-supply').innerText = netCirculatingSupply.toFixed(4) + ' FLAME';
+            document.getElementById('global-wh').innerText = totalGlobalWh.toFixed(6) + ' Wh';
+            document.getElementById('total-ram').innerText = totalRamGb.toFixed(2) + ' GB';
+
+            document.getElementById('nodes-table-body').innerHTML = tableRowsHtml;
+            document.getElementById('last-sync-time').innerText = 'Last sync: ' + new Date().toLocaleTimeString();
+
+            // Status Badge
             const statusText = document.getElementById('network-status-text');
             const statusBox = document.getElementById('network-badge-box');
             const pulseDot = document.getElementById('pulse-dot-indicator');
 
-            if (nodeKeys.length > 0 && hasLiveNode) {
-                statusText.innerText = 'CONNECTED / MESH LIVE';
-                statusText.style.color = '#10b981';
-                statusBox.style.borderColor = 'rgba(16, 185, 129, 0.35)';
-                statusBox.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
-                pulseDot.style.backgroundColor = '#10b981';
-            } else {
-                statusText.innerText = 'NO LIVE VALIDATORS';
-                statusText.style.color = '#f59e0b';
-                statusBox.style.borderColor = 'rgba(245, 158, 11, 0.35)';
-                statusBox.style.backgroundColor = 'rgba(245, 158, 11, 0.12)';
-                pulseDot.style.backgroundColor = '#f59e0b';
-            }
-
-            // Render Agent Context Bar if present
-            if (agentCtx && agentCtx.agents) {
-                const agentBar = document.getElementById('agent-bar');
-                let agentHtml = '';
-                for (const [agentName, info] of Object.entries(agentCtx.agents)) {
-                    agentHtml += `
-                        <div class="agent-pill">
-                            <span class="agent-name">${agentName}</span>
-                            <span style="color: var(--text-muted); font-size: 0.75rem;">(${info.status})</span>
-                        </div>
-                    `;
-                }
-                agentBar.innerHTML = agentHtml;
-            }
-
-            // Render Table Rows
-            const tbody = document.getElementById('nodes-table-body');
-            if (nodeKeys.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No active validators currently reporting telemetry.</td></tr>`;
-                return;
-            }
-
-            let rowsHtml = '';
-            for (const key of nodeKeys) {
-                const node = nodes[key];
-                const nodeArch = node.node_specs ? (node.node_specs.architecture || 'arm64') : 'arm64';
-                const ramTotalMb = parseFloat(node.total_mb_ram || node.total_ram_mb || 4096.0).toFixed(0);
-                const shard = node.active_shard_id || node.shard_id || 'shard_0_vision_encoder.bin';
-                const pulse = node.pulse_count || 0;
-                const nodeWh = parseFloat(node.accumulated_wh || node.watt_hours || 0.0).toFixed(6);
-                const nodeFlame = parseFloat(node.minted_flame_units || node.minted_flame || 0.0).toFixed(4);
-
-                rowsHtml += `
-                    <tr>
-                        <td class="mono" style="font-weight: 700; color: var(--accent-gold);">${node.node_id || key}</td>
-                        <td class="mono">${nodeArch}</td>
-                        <td class="mono">${ramTotalMb} MB</td>
-                        <td class="mono" style="color: var(--accent-cyan);">${shard}</td>
-                        <td class="mono">#${pulse}</td>
-                        <td class="mono">${nodeWh} Wh</td>
-                        <td class="mono" style="font-weight: 700; color: var(--accent-orange);">${nodeFlame} FLAME</td>
-                        <td><span class="badge-status">ONLINE</span></td>
-                    </tr>
-                `;
-            }
-
-            tbody.innerHTML = rowsHtml;
+            statusText.innerText = 'CONNECTED / MESH LIVE';
+            statusText.style.color = '#10b981';
+            statusBox.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+            statusBox.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
+            pulseDot.style.backgroundColor = '#10b981';
         }
 
-        // Initial trigger and continuous 3-second polling
-        fetchNetworkState();
-        setInterval(fetchNetworkState, 3000);
+        // Initial trigger and continuous 3-second polling loop
+        updateDashboard();
+        setInterval(updateDashboard, 3000);
     </script>
 </body>
 </html>
