@@ -47,17 +47,19 @@ def save_local_node_state(state):
 
 def mint_pulse_hash(state):
     now = time.time()
-    nonce = state["total_pulses_minted"] + 1
     
+    # KeyError safe lookup fallback
+    nonce = state.get("total_pulses_minted", state.get("pulse_counter", 0)) + 1
+    state["total_pulses_minted"] = nonce
+
     wh_delta = 0.05
     token_delta = 1.25
     
-    state["watt_hours_contributed"] = round(state["watt_hours_contributed"] + wh_delta, 4)
-    state["minted_balance"] = round(state["minted_balance"] + token_delta, 4)
-    state["total_pulses_minted"] += 1
+    state["watt_hours_contributed"] = round(state.get("watt_hours_contributed", 0.0) + wh_delta, 4)
+    state["minted_balance"] = round(state.get("minted_balance", 0.0) + token_delta, 4)
     state["last_mint_timestamp"] = now
 
-    raw_header = f"{state['node_id']}:{now}:{state['watt_hours_contributed']}:{nonce}"
+    raw_header = f"{state.get('node_id', 'unknown_node')}:{now}:{state['watt_hours_contributed']}:{nonce}"
     pulse_hash = hashlib.sha256(raw_header.encode("utf-8")).hexdigest()
 
     pulse_record = {
@@ -68,26 +70,29 @@ def mint_pulse_hash(state):
         "timestamp": now
     }
 
+    if "uncommitted_pulses" not in state or not isinstance(state["uncommitted_pulses"], list):
+        state["uncommitted_pulses"] = []
+        
     state["uncommitted_pulses"].append(pulse_record)
     print(f"[⚡] Minted Pulse #{nonce} | Hash: {pulse_hash[:16]}... | +{wh_delta} Wh | Total: {state['minted_balance']} FLAME")
     return pulse_record
 
 def attempt_telemetry_post(state):
     payload = {
-        "node_id": state["node_id"],
-        "device_model": state["device_model"],
-        "watt_hours_contributed": state["watt_hours_contributed"],
-        "ram_allocated_mb": state["ram_allocated_mb"],
-        "active_shards": state["active_shards"],
-        "minted_balance": state["minted_balance"],
-        "total_pulses": state["total_pulses_minted"],
-        "uncommitted_count": len(state["uncommitted_pulses"])
+        "node_id": state.get("node_id", "node_iphone_ios"),
+        "device_model": state.get("device_model", "iPhone 14 Pro"),
+        "watt_hours_contributed": state.get("watt_hours_contributed", 0.0),
+        "ram_allocated_mb": state.get("ram_allocated_mb", 3072.0),
+        "active_shards": state.get("active_shards", []),
+        "minted_balance": state.get("minted_balance", 0.0),
+        "total_pulses": state.get("total_pulses_minted", 0),
+        "uncommitted_count": len(state.get("uncommitted_pulses", []))
     }
 
     encoded_data = json.dumps(payload).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "FlameChain-iOS-ResilientNode/1.0"
+        "User-Agent": "FlameChain-iOS-ResilientNode/1.1"
     }
 
     targets = [PRIMARY_GATEWAY, LOCAL_FALLBACK_GATEWAY]
@@ -110,7 +115,7 @@ def attempt_telemetry_post(state):
             print(f"[!] Transmission error ({target_url}): {str(e)}")
 
     if not synced:
-        print(f"[🔒] Gateway unavailable. Preserving {len(state['uncommitted_pulses'])} pulse(s) in local {NODE_STATE_FILE}.")
+        print(f"[🔒] Gateway unavailable. Preserving {len(state.get('uncommitted_pulses', []))} pulse(s) in local {NODE_STATE_FILE}.")
 
     save_local_node_state(state)
 

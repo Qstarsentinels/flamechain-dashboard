@@ -1,26 +1,16 @@
 {
-    "total_gross_supply": 8321.0,
-    "total_watt_hours": 77.4,
-    "total_allocated_ram_mb": 18432.0,
-    "last_updated": 1700000000.0,
+    "minted_flame_units": 10.5,
+    "accumulated_watt_hours": 0.0105,
     "nodes": {
         "node_tab_localhost": {
-            "device_model": "Galaxy Tab S8 (Termux Core)",
-            "watt_hours": 45.0,
-            "ram_allocated_mb": 12288.0,
-            "active_shards": ["master-shard-0", "llama3-shard-1"],
-            "minted_balance": 3500.25,
-            "status": "active",
-            "last_seen": 1700000000.0
+            "pulse": 35,
+            "status": "ONLINE",
+            "wh": 0.005
         },
         "ios_ipad_pro_m2_mesh_01": {
-            "device_model": "iPad Pro M2 (iOS Gateway)",
-            "watt_hours": 32.4,
-            "ram_allocated_mb": 6144.0,
-            "active_shards": ["llama3-8b-shard-00", "llama3-8b-shard-01"],
-            "minted_balance": 4820.75,
-            "status": "active",
-            "last_seen": 1700000000.0
+            "pulse": 32,
+            "status": "ONLINE",
+            "wh": 0.0055
         }
     }
 }
