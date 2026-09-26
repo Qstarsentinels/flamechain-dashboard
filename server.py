@@ -1,72 +1,93 @@
-import http.server
-import json
+#!/usr/bin/env python3
+"""
+FlameChain Global Network State Sync & Telemetry Server
+Listens on ('0.0.0.0', 8546)
+Receives validator node telemetry via POST /telemetry/submit,
+updates global aggregate metrics, and serves HTTP GET endpoints for dashboard UI.
+"""
+
 import os
+import sys
+import json
 import time
 import threading
+import http.server
 from http import HTTPStatus
 
 PORT = 8546
+HOST = '0.0.0.0'
 STATE_FILE = "global_network_state.json"
 INDEX_FILE = "index.html"
 file_lock = threading.Lock()
 
 class FlameChainServer(http.server.BaseHTTPRequestHandler):
-    def _set_headers(self, status=HTTPStatus.OK, content_type="application/json"):
+    def _set_cors_headers(self, status=HTTPStatus.OK, content_type="application/json"):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
 
     def do_OPTIONS(self):
-        self._set_headers(HTTPStatus.OK)
+        """Respond to CORS preflight requests."""
+        self._set_cors_headers(HTTPStatus.OK)
 
     def do_GET(self):
+        """Serve GET / (index.html) and GET /state or /global_network_state.json."""
         path = self.path.split('?')[0]
 
-        if path == "/" or path == "/index.html":
+        if path in ["/", "/index.html"]:
             if os.path.exists(INDEX_FILE):
                 try:
                     with open(INDEX_FILE, "rb") as f:
                         content = f.read()
-                    self._set_headers(HTTPStatus.OK, content_type="text/html; charset=utf-8")
+                    self._set_cors_headers(HTTPStatus.OK, content_type="text/html; charset=utf-8")
                     self.wfile.write(content)
                 except Exception as e:
-                    self._set_headers(HTTPStatus.INTERNAL_SERVER_ERROR)
-                    self.wfile.write(json.dumps({"error": f"Failed to read index.html: {str(e)}"}).encode('utf-8'))
+                    self._set_cors_headers(HTTPStatus.INTERNAL_SERVER_ERROR)
+                    self.wfile.write(json.dumps({"error": f"Failed to serve dashboard: {str(e)}"}).encode('utf-8'))
             else:
-                self._set_headers(HTTPStatus.NOT_FOUND, content_type="text/html; charset=utf-8")
-                default_html = "<html><body><h1>FlameChain Node Portal</h1><p>index.html not found.</p></body></html>"
-                self.wfile.write(default_html.encode('utf-8'))
+                self._set_cors_headers(HTTPStatus.NOT_FOUND, content_type="text/html; charset=utf-8")
+                fallback_html = "<html><body><h1>FlameChain Node Server</h1><p>index.html missing.</p></body></html>"
+                self.wfile.write(fallback_html.encode('utf-8'))
 
-        elif path == "/state" or path == "/global_network_state.json":
+        elif path in ["/state", "/global_network_state.json", "/api/state"]:
             with file_lock:
                 if not os.path.exists(STATE_FILE):
-                    self._set_headers(HTTPStatus.OK)
-                    self.wfile.write(json.dumps({"nodes": {}}).encode('utf-8'))
+                    empty_state = {
+                        "active_nodes": {},
+                        "total_active_nodes": 0,
+                        "total_network_wh": 0.0,
+                        "total_network_flame": 0.0,
+                        "last_updated": time.time()
+                    }
+                    self._set_cors_headers(HTTPStatus.OK)
+                    self.wfile.write(json.dumps(empty_state).encode('utf-8'))
                     return
+
                 try:
                     with open(STATE_FILE, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                    self._set_headers(HTTPStatus.OK)
+                    self._set_cors_headers(HTTPStatus.OK)
                     self.wfile.write(json.dumps(data).encode('utf-8'))
                 except Exception as e:
-                    self._set_headers(HTTPStatus.INTERNAL_SERVER_ERROR)
+                    self._set_cors_headers(HTTPStatus.INTERNAL_SERVER_ERROR)
                     self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
 
         else:
-            self._set_headers(HTTPStatus.NOT_FOUND)
+            self._set_cors_headers(HTTPStatus.NOT_FOUND)
             self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode('utf-8'))
 
     def do_POST(self):
+        """Process validator telemetry updates via POST /telemetry/submit."""
         path = self.path.split('?')[0]
 
-        if path == "/telemetry/submit" or path == "/telemetry":
+        if path in ["/telemetry/submit", "/telemetry"]:
             content_length = int(self.headers.get('Content-Length', 0))
             if content_length == 0:
-                self._set_headers(HTTPStatus.BAD_REQUEST)
-                self.wfile.write(json.dumps({"error": "Empty payload"}).encode('utf-8'))
+                self._set_cors_headers(HTTPStatus.BAD_REQUEST)
+                self.wfile.write(json.dumps({"error": "Empty telemetry payload"}).encode('utf-8'))
                 return
 
             post_data = self.rfile.read(content_length)
@@ -74,71 +95,102 @@ class FlameChainServer(http.server.BaseHTTPRequestHandler):
             try:
                 payload = json.loads(post_data.decode('utf-8'))
             except json.JSONDecodeError:
-                self._set_headers(HTTPStatus.BAD_REQUEST)
-                self.wfile.write(json.dumps({"error": "Invalid JSON payload"}).encode('utf-8'))
+                self._set_cors_headers(HTTPStatus.BAD_REQUEST)
+                self.wfile.write(json.dumps({"error": "Malformed JSON in request body"}).encode('utf-8'))
                 return
 
             with file_lock:
-                # Load current global state
-                current_state = {"nodes": {}}
+                # Load existing network state or initialize default structure
+                global_state = {
+                    "active_nodes": {},
+                    "total_active_nodes": 0,
+                    "total_network_wh": 0.0,
+                    "total_network_flame": 0.0,
+                    "last_updated": time.time()
+                }
+
                 if os.path.exists(STATE_FILE):
                     try:
                         with open(STATE_FILE, "r", encoding="utf-8") as f:
-                            current_state = json.load(f)
-                            if "nodes" not in current_state or not isinstance(current_state["nodes"], dict):
-                                current_state["nodes"] = {}
+                            loaded = json.load(f)
+                            if isinstance(loaded, dict):
+                                global_state.update(loaded)
+                                if "active_nodes" not in global_state or not isinstance(global_state["active_nodes"], dict):
+                                    global_state["active_nodes"] = {}
                     except json.JSONDecodeError:
-                        current_state = {"nodes": {}}
+                        pass
 
-                # Extract telemetry fields
-                node_id = payload.get("node_id") or payload.get("id") or "unknown_node"
-                ram = payload.get("ram") or payload.get("total_ram_mb") or 0
-                watt_hours = payload.get("watt_hours") or payload.get("wh") or 0.0
-                shard_id = payload.get("shard_id") or payload.get("active_shard") or "shard_0_vision_encoder.bin"
-                last_seen = payload.get("last_seen") or time.time()
+                # Extract telemetry attributes
+                node_id = payload.get("node_id") or "node_unknown"
+                ram = float(payload.get("ram", 0.0))
+                watt_hours = float(payload.get("watt_hours", 0.0))
+                shard_id = payload.get("shard_id") or payload.get("active_shard_id") or "shard_0_vision_encoder.bin"
+                minted_flame = float(payload.get("minted_flame", 0.0))
+                state_root = payload.get("state_root", "")
+                last_seen = float(payload.get("last_seen", time.time()))
 
-                # Update state for node
-                current_state["nodes"][node_id] = {
+                # Upsert active node record
+                global_state["active_nodes"][node_id] = {
                     "node_id": node_id,
-                    "ram": ram,
+                    "ram_mb": ram,
                     "watt_hours": watt_hours,
+                    "minted_flame": minted_flame,
                     "shard_id": shard_id,
+                    "state_root": state_root,
                     "last_seen": last_seen
                 }
 
-                # Atomic write back to global_network_state.json
+                # Compute network-wide aggregate stats
+                nodes_dict = global_state["active_nodes"]
+                global_state["total_active_nodes"] = len(nodes_dict)
+                global_state["total_network_wh"] = round(sum(n.get("watt_hours", 0.0) for n in nodes_dict.values()), 6)
+                global_state["total_network_flame"] = round(sum(n.get("minted_flame", 0.0) for n in nodes_dict.values()), 4)
+                global_state["last_updated"] = time.time()
+
+                # Atomically write state to disk
                 tmp_file = f"{STATE_FILE}.tmp"
                 try:
                     with open(tmp_file, "w", encoding="utf-8") as f:
-                        json.dump(current_state, f, indent=2)
+                        json.dump(global_state, f, indent=2)
                     os.replace(tmp_file, STATE_FILE)
 
-                    self._set_headers(HTTPStatus.OK)
-                    self.wfile.write(json.dumps({
-                        "status": "success",
+                    self._set_cors_headers(HTTPStatus.OK)
+                    response_payload = {
+                        "status": "acknowledged",
                         "node_id": node_id,
-                        "updated_at": last_seen
-                    }).encode('utf-8'))
+                        "network_active_nodes": global_state["total_active_nodes"],
+                        "total_network_wh": global_state["total_network_wh"],
+                        "total_network_flame": global_state["total_network_flame"],
+                        "timestamp": global_state["last_updated"]
+                    }
+                    self.wfile.write(json.dumps(response_payload).encode('utf-8'))
                 except Exception as e:
-                    self._set_headers(HTTPStatus.INTERNAL_SERVER_ERROR)
-                    self.wfile.write(json.dumps({"error": f"Failed to store telemetry: {str(e)}"}).encode('utf-8'))
+                    self._set_cors_headers(HTTPStatus.INTERNAL_SERVER_ERROR)
+                    self.wfile.write(json.dumps({"error": f"Failed to persist state: {str(e)}"}).encode('utf-8'))
 
         else:
-            self._set_headers(HTTPStatus.NOT_FOUND)
-            self.wfile.write(json.dumps({"error": "POST path not recognized"}).encode('utf-8'))
+            self._set_cors_headers(HTTPStatus.NOT_FOUND)
+            self.wfile.write(json.dumps({"error": f"Path '{path}' not found"}).encode('utf-8'))
 
     def log_message(self, format, *args):
+        # Clean single line log format
         print(f"[FlameChain Server] {self.address_string()} - {format % args}")
 
-def main():
-    server_address = ('', PORT)
+def run_server():
+    server_address = (HOST, PORT)
     httpd = http.server.ThreadingHTTPServer(server_address, FlameChainServer)
-    print(f"[+] FlameChain Telemetry and State Server hosting on port {PORT}...")
+    print("==================================================")
+    print(f"   FLAMECHAIN GLOBAL AGGREGATOR SERVER ONLINE   ")
+    print("==================================================")
+    print(f" Binding Address : http://{HOST}:{PORT}")
+    print(f" Telemetry URL   : http://{HOST}:{PORT}/telemetry/submit")
+    print(f" Dashboard URL   : http://{HOST}:{PORT}/")
+    print("==================================================\n")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n[-] Shutting down server.")
+        print("\n[-] Server shutting down gracefully.")
         httpd.server_close()
 
 if __name__ == '__main__':
-    main()
+    run_server()
