@@ -28,14 +28,14 @@
       "pulse_count": 0,
       "wh_consumed": 0.0,
       "flame_minted": 0.0,
-      "timestamp": 1790537962.162056,
+      "timestamp": 1790538956.1541126,
       "status": "ACTIVE"
     }
   },
   "total_active_nodes": 3,
   "last_telemetry_submit": 1700000000,
-  "energy_wh": 0.0,
+  "energy_wh": 0.0105,
   "gross_supply": 0.0,
   "combined_mesh_memory_gb": 4.0,
-  "last_updated": 1790537962.1625006
+  "last_updated": 1790538956.1541126
 }
