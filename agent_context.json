@@ -1,53 +1,20 @@
 {
-  "network_singularity": {
-    "total_active_validators": 0,
-    "aggregate_ram_gb": 0.0,
-    "total_gross_supply": 0.0,
-    "global_watt_hours": 0.0,
-    "average_watt_hours": 0.0,
-    "last_agent_sync": 1790461940.8553655
+  "system": {
+    "arch": "aarch64",
+    "platform": "Android/Termux (Galaxy Tab)",
+    "total_ram_mb": 8192
   },
-  "agents": {
-    "FlameGPT": {
-      "status": "ONLINE",
-      "role": "Mesh Query & Natural Language Interface",
-      "capabilities": [
-        "Query Network RAM",
-        "Query Token Supply",
-        "Analyze Hardware Capacity"
-      ]
-    },
-    "Sovereign_LLM": {
-      "status": "ACTIVE",
-      "role": "Shard Consensus & Model Weight Synthesis",
-      "capabilities": [
-        "Model Shard Swapping",
-        "Cross-Node Inference Consensus"
-      ]
-    },
-    "Oracle": {
-      "status": "ONLINE",
-      "role": "Energy Proof Verification & Wh Indexing",
-      "capabilities": [
-        "Verify Energy Pulses",
-        "Index Watt-Hour Proofs"
-      ]
-    },
-    "Alchemist": {
-      "status": "ACTIVE",
-      "role": "FLAME Minting & Vault Liquidity Engine",
-      "capabilities": [
-        "Token Minting",
-        "Vault Tax Calculation"
-      ]
-    },
-    "Sentinel": {
-      "status": "GUARDING",
-      "role": "Network Threat Protection & State Integrity",
-      "capabilities": [
-        "State Root Verification",
-        "Sybil Attack Defense"
-      ]
-    }
+  "active_agents": {
+    "FlameGPT": "ONLINE",
+    "Sovereign_LLM": "ONLINE",
+    "Oracle": "ONLINE",
+    "Alchemist": "ONLINE",
+    "Sentinel": "ONLINE"
+  },
+  "mesh_totals": {
+    "active_validators": 0,
+    "aggregate_ram_gb": 0.0,
+    "gross_supply": 0.0,
+    "total_wh": 0.0
   }
 }
