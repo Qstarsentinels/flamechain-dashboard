@@ -1,9 +1,9 @@
 import json
-import time
 import os
 import platform
-import urllib.request
+import time
 import urllib.error
+import urllib.request
 
 TELEMETRY_ENDPOINT = "http://127.0.0.1:8546/telemetry/submit"
 LOCAL_STATE_FILE = "node_state.json"
@@ -11,7 +11,7 @@ GLOBAL_STATE_FILE = "global_network_state.json"
 
 def collect_telemetry_payload():
     """
-    Gather low-overhead hardware metrics and node operation telemetry.
+    Gather lightweight hardware metrics and AGI node telemetry.
     """
     return {
         "node_id": os.getenv("FLAMECHAIN_NODE_ID", f"node-ios-{os.getpid()}"),
@@ -25,26 +25,26 @@ def collect_telemetry_payload():
         "status": "HEALTHY"
     }
 
-def update_local_state_files(payload):
+def persist_local_state(payload):
     """
-    Persist state directly to disk so node context remains available
-    even during offline/network degradation scenarios.
+    Persists state to node_state.json FIRST on every pulse before network attempts.
+    Also syncs aggregate telemetry into global_network_state.json.
     """
-    # 1. Atomic write to node_state.json
+    # 1. Primary local state write
     try:
         with open(LOCAL_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
     except Exception as e:
-        print(f"[State IO Error] Failed updating {LOCAL_STATE_FILE}: {e}")
+        print(f"[State Write Error] Failed updating {LOCAL_STATE_FILE}: {e}")
 
-    # 2. Synchronize aggregate metrics to global_network_state.json
+    # 2. Aggregate global state sync
     try:
         global_data = {}
         if os.path.exists(GLOBAL_STATE_FILE):
             try:
                 with open(GLOBAL_STATE_FILE, "r", encoding="utf-8") as f:
                     global_data = json.load(f)
-            except json.JSONDecodeError:
+            except Exception:
                 global_data = {}
 
         nodes = global_data.get("nodes", {})
@@ -56,19 +56,17 @@ def update_local_state_files(payload):
 
         global_data["nodes"] = nodes
         global_data["last_updated"] = time.time()
-        global_data["network_version"] = global_data.get("network_version", "1.0.0-singularity")
         global_data["total_active_nodes"] = len(nodes)
 
         with open(GLOBAL_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(global_data, f, indent=2)
-
     except Exception as e:
-        print(f"[State IO Error] Failed updating {GLOBAL_STATE_FILE}: {e}")
+        print(f"[State Write Error] Failed updating {GLOBAL_STATE_FILE}: {e}")
 
 def submit_telemetry(payload):
     """
-    Attempts POST payload submission to HTTP endpoint.
-    Gracefully handles connection errors without throwing exceptions.
+    Attempts POST submit to ingest endpoint with minimal timeout.
+    Catches URLError/ConnectionRefusedError non-blocking and continues instantly.
     """
     encoded_data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
@@ -82,42 +80,37 @@ def submit_telemetry(payload):
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=3) as response:
-            print(f"[Telemetry Ingest] Submitted payload to {TELEMETRY_ENDPOINT} -> HTTP {response.getcode()}")
-            return True
-    except urllib.error.HTTPError as e:
-        print(f"[Telemetry Warning] HTTP {e.code} from ingest endpoint: {e.reason}")
-        return False
-    except urllib.error.URLError as e:
-        print(f"[Telemetry Offline] Ingest endpoint {TELEMETRY_ENDPOINT} unreachable: {e.reason}")
-        return False
-    except Exception as e:
-        print(f"[Telemetry Exception] Transport layer exception ignored: {e}")
-        return False
+        # 1-second connect/read timeout prevents blocking the pulse loop
+        with urllib.request.urlopen(request, timeout=1) as response:
+            pass
+    except (urllib.error.URLError, urllib.error.HTTPError, ConnectionRefusedError, OSError):
+        # Gracefully swallow network/connection errors without stalling execution
+        pass
+    except Exception:
+        # Non-fatal fallback catch
+        pass
 
-def run_minting_and_telemetry_loop(interval_seconds=5):
+def start_pulse_loop(interval_seconds=5):
     """
-    Main AGI minting and state propagation loop.
-    Guaranteed continuous execution regardless of network connectivity.
+    Main pulse loop: Persists local state first, attempts non-blocking telemetry submit,
+    and immediately continues execution.
     """
-    print(f"[FlameChain Worker] Node active. Writing state locally & syncing with {TELEMETRY_ENDPOINT}")
-    
+    print(f"[FlameChain Mobile Node] Active. Persisting to {LOCAL_STATE_FILE} and posting to {TELEMETRY_ENDPOINT}")
     while True:
         try:
-            # Step 1: Collect node telemetry & AGI shard block state
+            # Step 1: Collect payload
             payload = collect_telemetry_payload()
 
-            # Step 2: Write state directly to disk
-            update_local_state_files(payload)
+            # Step 2: Persist state locally FIRST on every pulse
+            persist_local_state(payload)
 
-            # Step 3: Attempt remote network submission (non-blocking failure)
+            # Step 3: Attempt telemetry transport (non-blocking failure)
             submit_telemetry(payload)
 
         except Exception as err:
-            # Global catch-all to guarantee minting process never crashes
-            print(f"[Worker Exception] Non-fatal loop error: {err}")
+            print(f"[Pulse Warning] Loop iteration exception swallowed: {err}")
 
         time.sleep(interval_seconds)
 
 if __name__ == "__main__":
-    run_minting_and_telemetry_loop()
+    start_pulse_loop()
