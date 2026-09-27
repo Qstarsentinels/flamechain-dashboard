@@ -10,6 +10,49 @@ TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_URL", "http://127.0.0.1:8546/telemetry
 LOCAL_STATE_FILE = "node_state.json"
 GLOBAL_STATE_FILE = "global_network_state.json"
 
+def load_initial_state():
+    pulse_count = 0
+    wh_consumed = 0.0
+    flame_minted = 0.0
+
+    if os.path.exists(LOCAL_STATE_FILE):
+        try:
+            with open(LOCAL_STATE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if isinstance(data, dict):
+                pulse_count = data.get("pulse_count") or data.get("pulse") or 0
+
+                metrics = data.get("metrics", {}) if isinstance(data.get("metrics"), dict) else {}
+                energy_metrics = data.get("energy_metrics", {}) if isinstance(data.get("energy_metrics"), dict) else {}
+
+                wh_val = (
+                    data.get("watt_hours_consumed") or
+                    data.get("wh_consumed") or
+                    metrics.get("watt_hours_consumed") or
+                    metrics.get("wh_consumed") or
+                    energy_metrics.get("watt_hours_consumed") or
+                    energy_metrics.get("wh_consumed") or
+                    0.0
+                )
+                wh_consumed = float(wh_val)
+
+                minted_val = (
+                    data.get("flame_minted") or
+                    data.get("minted") or
+                    metrics.get("flame_minted") or
+                    metrics.get("minted") or
+                    energy_metrics.get("flame_minted") or
+                    energy_metrics.get("minted") or
+                    0.0
+                )
+                flame_minted = float(minted_val)
+
+        except Exception:
+            pass
+
+    return int(pulse_count), float(wh_consumed), float(flame_minted)
+
 def collect_telemetry_payload(pulse_count, hash_val, ram_mb, wh, minted, shard_name):
     node_id = os.getenv("FLAMECHAIN_NODE_ID", f"node-ios-{os.getpid()}")
     return {
@@ -18,9 +61,13 @@ def collect_telemetry_payload(pulse_count, hash_val, ram_mb, wh, minted, shard_n
         "timestamp": time.time(),
         "pulse_count": pulse_count,
         "proof_hash": hash_val,
+        "energy_metrics": {
+            "watt_hours_consumed": round(wh, 6),
+            "flame_minted": round(minted, 6)
+        },
         "metrics": {
             "watt_hours_consumed": round(wh, 6),
-            "flame_minted": round(minted, 4),
+            "flame_minted": round(minted, 6),
             "allocated_ram_mb": ram_mb,
             "shard_name": shard_name,
             "shard_processing_rate_tps": 48.2
@@ -84,22 +131,28 @@ def submit_telemetry(payload):
         print("[Telemetry Offline] Local state saved.", flush=True)
 
 def run_pulse_loop(interval_seconds=5):
-    pulse_count = 0
+    pulse_count, wh_consumed, flame_minted = load_initial_state()
+    
     node_id = os.getenv("FLAMECHAIN_NODE_ID", f"node-ios-{os.getpid()}")
     shards = ["shard-0-embed", "shard-1-attn", "shard-2-mlp", "shard-3-norm"]
+    ram_mb = 137760.00
+
+    print(f"[FlameChain Boot] Restored state -> Pulse: #{pulse_count} | Wh: {wh_consumed:.6f} | FLAME: {flame_minted:.6f}", flush=True)
 
     while True:
         pulse_count += 1
         
+        delta_wh = 0.000150
+        wh_consumed += delta_wh
+        delta_minted = 0.812500
+        flame_minted += delta_minted
+
         hash_val = hashlib.sha256(f"{node_id}-{pulse_count}-{time.time()}".encode("utf-8")).hexdigest()
-        ram_mb = 1536
-        wh = pulse_count * 0.00035
-        minted = wh * 1.61803398875
         shard_name = shards[pulse_count % len(shards)]
 
-        print(f"[⚡ PULSE #{pulse_count}] Hash: {hash_val[:16]}... | RAM: {ram_mb} MB | Wh: {wh:.6f} | Minted: {minted:.4f} FLAME | Shard: {shard_name}", flush=True)
+        print(f"[⚡ PULSE #{pulse_count}] Hash: {hash_val[:16]}... | RAM: {ram_mb:.2f} MB | Wh: {wh_consumed:.6f} | Minted: {flame_minted:.4f} FLAME | Shard: {shard_name}", flush=True)
 
-        payload = collect_telemetry_payload(pulse_count, hash_val, ram_mb, wh, minted, shard_name)
+        payload = collect_telemetry_payload(pulse_count, hash_val, ram_mb, wh_consumed, flame_minted, shard_name)
         persist_local_state(payload)
         submit_telemetry(payload)
         
