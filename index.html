@@ -13,7 +13,6 @@
             --accent-fire: #ef4444;
             --accent-gold: #f59e0b;
             --accent-cyan: #06b6d4;
-            --accent-purple: #a855f7;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --status-online: #10b981;
@@ -322,9 +321,8 @@
     </footer>
 
     <script>
-        const LOCAL_STATE_ENDPOINT = '/api/state';
-        const RAW_STATE_ENDPOINT = '/global_network_state.json';
-        const RAW_GITHUB_ENDPOINT = 'https://raw.githubusercontent.com/FlameChain/FlameChain/main/global_network_state.json';
+        const API_STATE_ENDPOINT = '/api/state';
+        const RAW_STATE_ENDPOINT = 'global_network_state.json';
         const AGENT_CONTEXT_ENDPOINT = '/api/agent-context';
 
         async function fetchJsonSafely(url) {
@@ -334,27 +332,22 @@
                     return await res.json();
                 }
             } catch (err) {
-                // Silently swallow warning for failover sequence
+                // Silently fall through to next endpoint on error
             }
             return null;
         }
 
         async function pollTelemetryAndAgents() {
-            // Priority state polling: Local API -> Raw file -> Raw GitHub
-            let stateData = await fetchJsonSafely(LOCAL_STATE_ENDPOINT);
+            // Poll /api/state first; if null, fall back to global_network_state.json
+            let stateData = await fetchJsonSafely(API_STATE_ENDPOINT);
             if (!stateData) {
                 stateData = await fetchJsonSafely(RAW_STATE_ENDPOINT);
             }
-            if (!stateData) {
-                stateData = await fetchJsonSafely(RAW_GITHUB_ENDPOINT);
-            }
 
-            // Fallback state structure if network disconnected
             if (!stateData) {
                 stateData = { active_nodes: {} };
             }
 
-            // Agent Context polling
             const agentData = await fetchJsonSafely(AGENT_CONTEXT_ENDPOINT);
 
             renderDashboard(stateData, agentData);
@@ -402,7 +395,6 @@
                 }
             }
 
-            // Fall back to root state values if direct sum is 0
             if (totalGrossSupply === 0 && state.total_gross_supply) {
                 totalGrossSupply = parseFloat(state.total_gross_supply);
             }
@@ -424,7 +416,6 @@
             document.getElementById('nodes-table-body').innerHTML = tableRowsHtml;
             document.getElementById('last-sync-time').innerText = 'Last sync: ' + new Date().toLocaleTimeString();
 
-            // Render Agent Context Badges
             if (agentCtx && agentCtx.agents) {
                 let agentHtml = '';
                 for (const [agentName, info] of Object.entries(agentCtx.agents)) {
@@ -439,7 +430,6 @@
                 document.getElementById('agent-badges-grid').innerHTML = agentHtml;
             }
 
-            // Update Badge Status Box
             const statusText = document.getElementById('network-status-text');
             const statusBox = document.getElementById('network-badge-box');
             const pulseDot = document.getElementById('pulse-dot-indicator');
@@ -451,7 +441,6 @@
             pulseDot.style.backgroundColor = '#10b981';
         }
 
-        // Trigger on load & poll every 3 seconds
         pollTelemetryAndAgents();
         setInterval(pollTelemetryAndAgents, 3000);
     </script>

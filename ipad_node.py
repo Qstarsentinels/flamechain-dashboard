@@ -2,7 +2,7 @@
 """
 FlameChain iPad Node Validator
 Backed by System RAM and Watt-Hour Proof-of-Work / Proof-of-Energy Pulses
-Periodic 5-pulse telemetry snapshot merger and local state disk syncing.
+Dynamic dual gateway fallback (loca.lt tunnel & LAN IP) with full session restart persistence.
 """
 
 import os
@@ -22,8 +22,9 @@ import urllib.error
 STATE_FILE = "node_state.json"
 GLOBAL_STATE_FILE = "global_network_state.json"
 SNAPSHOT_FILE = "node_telemetry_snapshot.json"
-FALLBACK_TELEMETRY_FILE = "local_mesh_telemetry.json"
-DEFAULT_GATEWAY = "http://172.20.10.1:8546/telemetry/submit"
+
+PRIMARY_TUNNEL_URL = "https://flamechain.loca.lt/telemetry/submit"
+FALLBACK_LAN_URL = "http://172.20.10.1:8546/telemetry/submit"
 
 SHARD_MODELS = [
     "shard_0_vision_encoder.bin",
@@ -32,16 +33,25 @@ SHARD_MODELS = [
     "shard_3_spatial_vector.bin"
 ]
 
-def get_telemetry_url():
-    """Retrieve telemetry endpoint from GATEWAY_URL env or fallback to 172.20.10.1:8546."""
+def get_telemetry_urls():
+    """
+    Returns telemetry URLs list in order of precedence:
+    1. GATEWAY_URL env variable (if set)
+    2. Primary Tunnel: https://flamechain.loca.lt/telemetry/submit
+    3. Fallback LAN: http://172.20.10.1:8546/telemetry/submit
+    """
+    urls = []
     env_url = os.environ.get("GATEWAY_URL")
     if env_url:
         if not env_url.startswith("http://") and not env_url.startswith("https://"):
             env_url = f"http://{env_url}"
         if "/telemetry/submit" not in env_url:
             env_url = env_url.rstrip("/") + "/telemetry/submit"
-        return env_url
-    return DEFAULT_GATEWAY
+        urls.append(env_url)
+
+    urls.append(PRIMARY_TUNNEL_URL)
+    urls.append(FALLBACK_LAN_URL)
+    return urls
 
 def get_total_ram_mb():
     """Detect total system memory in MB."""
@@ -95,9 +105,8 @@ def detect_device_specs():
 
 def merge_telemetry_to_global_state_direct(payload):
     """
-    Directly updates global_network_state.json on disk if present in directory.
-    Otherwise, writes node_telemetry_snapshot.json.
-    Includes node_id, total_mb_ram, active_shard_id, minted_flame_units, accumulated_wh, pulse_count.
+    Directly updates global_network_state.json on disk if present.
+    Also writes standalone node_telemetry_snapshot.json.
     """
     node_id = payload.get("node_id")
     snapshot_data = {
@@ -112,7 +121,6 @@ def merge_telemetry_to_global_state_direct(payload):
         "timestamp": payload.get("timestamp", time.time())
     }
 
-    # 1. Update global_network_state.json if present
     if os.path.exists(GLOBAL_STATE_FILE):
         try:
             global_state = {"active_nodes": {}}
@@ -123,10 +131,8 @@ def merge_telemetry_to_global_state_direct(payload):
                     if "active_nodes" not in global_state or not isinstance(global_state["active_nodes"], dict):
                         global_state["active_nodes"] = {}
 
-            # Upsert active node record
             global_state["active_nodes"][node_id] = snapshot_data
 
-            # Re-calculate aggregates
             nodes_list = list(global_state["active_nodes"].values())
             global_state["total_active_nodes"] = len(nodes_list)
             global_state["total_gross_supply"] = round(sum(float(n.get("minted_flame_units", 0.0)) for n in nodes_list), 4)
@@ -134,49 +140,51 @@ def merge_telemetry_to_global_state_direct(payload):
             global_state["total_mesh_ram_mb"] = round(sum(float(n.get("total_mb_ram", 0.0)) for n in nodes_list), 2)
             global_state["last_updated"] = time.time()
 
-            # Atomic write
             tmp_global = f"{GLOBAL_STATE_FILE}.tmp"
             with open(tmp_global, "w", encoding="utf-8") as f:
                 json.dump(global_state, f, indent=2)
             os.replace(tmp_global, GLOBAL_STATE_FILE)
-            print(f" [📁 DIRECT DISK SYNC] Updated {GLOBAL_STATE_FILE} directly for node '{node_id}' at Pulse #{snapshot_data['pulse_count']}")
-        except Exception as e:
-            print(f" [!] Failed direct write to {GLOBAL_STATE_FILE}: {e}")
+        except Exception:
+            pass
 
-    # 2. Always write node_telemetry_snapshot.json as a standalone relay file
     try:
         tmp_snap = f"{SNAPSHOT_FILE}.tmp"
         with open(tmp_snap, "w", encoding="utf-8") as f:
             json.dump(snapshot_data, f, indent=2)
         os.replace(tmp_snap, SNAPSHOT_FILE)
-    except Exception as e:
-        print(f" [!] Failed writing {SNAPSHOT_FILE}: {e}")
+    except Exception:
+        pass
 
 def send_telemetry_async(payload, pulse_count):
     """
     Non-blocking async telemetry thread.
-    Every 5 pulses, reads node_state.json/payload and updates global_network_state.json directly or writes snapshot.
+    Tries primary tunnel endpoint first (https://flamechain.loca.lt/telemetry/submit),
+    then falls back to LAN IP (http://172.20.10.1:8546/telemetry/submit).
+    Every 5 pulses, updates local state files directly.
     """
     def _post_task():
-        # Every 5 pulses, perform local direct disk sync/snapshot
         if pulse_count % 5 == 0:
             merge_telemetry_to_global_state_direct(payload)
 
-        # Attempt HTTP POST to HTTP server gateway
-        target_url = get_telemetry_url()
-        try:
-            data = json.dumps(payload).encode('utf-8')
-            req = urllib.request.Request(
-                target_url,
-                data=data,
-                headers={'Content-Type': 'application/json'},
-                method='POST'
-            )
-            with urllib.request.urlopen(req, timeout=2.0) as resp:
-                _ = resp.read()
-        except Exception:
-            # Silence expected offline HTTP exceptions during direct local disk updates
-            pass
+        data = json.dumps(payload).encode('utf-8')
+        target_urls = get_telemetry_urls()
+
+        for url in target_urls:
+            try:
+                req = urllib.request.Request(
+                    url,
+                    data=data,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Bypass-Tunnel-Remainder': 'true'
+                    },
+                    method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=2.5) as resp:
+                    if resp.status in (200, 201):
+                        return  # Successfully delivered telemetry
+            except Exception:
+                continue  # Fallthrough to next gateway URL on timeout/error
 
     thread = threading.Thread(target=_post_task, daemon=True)
     thread.start()
@@ -197,7 +205,12 @@ def save_local_state(state_dict):
         print(f"[!] Local state write warning: {e}", file=sys.stderr)
 
 def load_initial_state():
-    """Restores continuous state from node_state.json if present."""
+    """
+    State bootloader logic:
+    Checks if node_state.json exists on disk.
+    Loads accumulated_wh, pulse_count, minted_flame_units into memory on boot.
+    Prevents loss of progress on process restart.
+    """
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
@@ -206,31 +219,34 @@ def load_initial_state():
                 accumulated_wh = float(data.get("accumulated_wh", 0.0))
                 minted_flame_units = float(data.get("minted_flame_units", 0.0))
                 active_shard_id = data.get("active_shard_id", SHARD_MODELS[0])
-                print(f"[+] RESTORED PREVIOUS STATE from {STATE_FILE}:")
-                print(f"    - Resuming Pulse #  : {pulse_count}")
-                print(f"    - Accumulated Wh   : {accumulated_wh:.6f}")
-                print(f"    - Minted FLAME     : {minted_flame_units:.4f}\n")
+                print("==================================================")
+                print(f"[+] BOOTLOADER: PERSISTED STATE RESTORED FROM {STATE_FILE}")
+                print(f"    - Pulse Count        : #{pulse_count}")
+                print(f"    - Accumulated Energy : {accumulated_wh:.6f} Wh")
+                print(f"    - Total Minted Tokens: {minted_flame_units:.4f} FLAME")
+                print("==================================================\n")
                 return pulse_count, accumulated_wh, minted_flame_units, active_shard_id
         except Exception as e:
-            print(f"[!] Error loading {STATE_FILE}: {e}. Starting fresh session.")
+            print(f"[!] Warning reading {STATE_FILE}: {e}. Initializing fresh session.")
 
-    print(f"[+] Initializing fresh session state on {STATE_FILE}\n")
+    print(f"[+] BOOTLOADER: Initializing new local validator session on {STATE_FILE}\n")
     return 0, 0.0, 0.0, SHARD_MODELS[0]
 
 def run_validator():
     specs = detect_device_specs()
-    gateway_target = get_telemetry_url()
+    urls = get_telemetry_urls()
     print("==================================================")
     print("       FLAMECHAIN IPAD VALIDATOR NODE ONLINE       ")
     print("==================================================")
-    print(f" Node ID      : {specs['node_id']}")
-    print(f" Architecture : {specs['architecture']}")
-    print(f" OS           : {specs['os_system']}")
-    print(f" System RAM   : {specs['total_mb_ram']} MB")
-    print(f" Gateway URL  : {gateway_target}")
+    print(f" Node ID         : {specs['node_id']}")
+    print(f" Architecture    : {specs['architecture']}")
+    print(f" OS              : {specs['os_system']}")
+    print(f" System RAM      : {specs['total_mb_ram']} MB")
+    print(f" Primary Tunnel  : {urls[0]}")
+    print(f" Fallback LAN IP : {PRIMARY_TUNNEL_URL if len(urls) > 1 else 'None'}")
     print("==================================================")
 
-    # Restore session
+    # State bootloader persistence
     pulse_count, accumulated_wh, minted_flame_units, restored_shard_id = load_initial_state()
 
     active_shard_idx = 0
@@ -251,7 +267,7 @@ def run_validator():
             active_shard_id = SHARD_MODELS[active_shard_idx]
             print(f"\n[\U0001f504 SHARD HOT-SWAP] Active Shard Changed -> ({active_shard_idx + 1}/{len(SHARD_MODELS)}): {active_shard_id}")
 
-        # Compute SHA-256 block hash
+        # Compute block hash
         pulse_data = f"{pulse_count}:{last_hash}:{active_shard_id}:{specs['node_id']}:{pulse_start}"
         pulse_hash = hashlib.sha256(pulse_data.encode('utf-8')).hexdigest()
         last_hash = pulse_hash
@@ -265,7 +281,7 @@ def run_validator():
         wh_delta = (baseline_power_watts * elapsed) / 3600.0
         accumulated_wh += wh_delta
 
-        # Minting rewards calculation
+        # Continuous minting rewards calculation
         minted_flame_units = (accumulated_wh * 1000.0) + (ram_used_mb * 0.01)
 
         # Deterministic State Root
@@ -284,7 +300,7 @@ def run_validator():
             "timestamp": time.time()
         }
 
-        # Save to local node_state.json on every pulse
+        # Save to node_state.json on every pulse
         save_local_state(local_state)
 
         # Assemble telemetry payload
@@ -300,7 +316,7 @@ def run_validator():
             "timestamp": time.time()
         }
 
-        # Trigger telemetry worker (updates global_network_state.json directly every 5 pulses)
+        # Trigger async telemetry worker
         send_telemetry_async(telemetry_payload, pulse_count)
 
         # Print continuous pulse stdout
