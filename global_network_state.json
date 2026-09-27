@@ -1,16 +1,26 @@
 {
-    "minted_flame_units": 10.5,
-    "accumulated_watt_hours": 0.0105,
-    "nodes": {
-        "node_tab_localhost": {
-            "pulse": 35,
-            "status": "ONLINE",
-            "wh": 0.005
-        },
-        "ios_ipad_pro_m2_mesh_01": {
-            "pulse": 32,
-            "status": "ONLINE",
-            "wh": 0.0055
-        }
+  "minted_flame_units": 10.5,
+  "accumulated_watt_hours": 0.0105,
+  "nodes": {
+    "node_tab_localhost": {
+      "pulse": 35,
+      "status": "ONLINE",
+      "wh": 0.005
+    },
+    "ios_ipad_pro_m2_mesh_01": {
+      "pulse": 32,
+      "status": "ONLINE",
+      "wh": 0.0055
+    },
+    "test-node-01": {
+      "node_id": "test-node-01",
+      "timestamp": 1700000000,
+      "metrics": {
+        "watt_hours_consumed": 0.12
+      },
+      "status": "HEALTHY"
     }
+  },
+  "total_active_nodes": 3,
+  "last_telemetry_submit": 1700000000
 }
