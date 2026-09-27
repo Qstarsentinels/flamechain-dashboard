@@ -1,20 +1,12 @@
 {
-  "system": {
-    "arch": "aarch64",
-    "platform": "Android/Termux (Galaxy Tab)",
-    "total_ram_mb": 8192
-  },
-  "active_agents": {
-    "FlameGPT": "ONLINE",
-    "Sovereign_LLM": "ONLINE",
-    "Oracle": "ONLINE",
-    "Alchemist": "ONLINE",
-    "Sentinel": "ONLINE"
-  },
-  "mesh_totals": {
-    "active_validators": 0,
-    "aggregate_ram_gb": 0.0,
-    "gross_supply": 0.0,
-    "total_wh": 0.0
-  }
+  "node_id": "flamechain-termux-galaxy-tab",
+  "status": "ACTIVE_PROOF_OF_WATT",
+  "watt_hours_reserve": 45.0,
+  "total_network_ram": "128 GB",
+  "flameGPT_memory_allocation": "6 GB",
+  "active_mesh_nodes": [
+    "192.168.1.101:8080",
+    "192.168.1.102:8080",
+    "192.168.1.105:8080"
+  ]
 }

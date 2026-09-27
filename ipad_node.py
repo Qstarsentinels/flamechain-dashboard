@@ -3,8 +3,6 @@ import os
 import platform
 import time
 import hashlib
-import threading
-import base64
 import urllib.error
 import urllib.request
 
@@ -27,7 +25,7 @@ def print_hardware_header(node_id, pulse_count, wh_consumed, flame_minted):
     arch = platform.machine() or platform.architecture()[0]
     os_info = f"{platform.system()} {platform.release()}"
     sys_ram = detect_system_ram_mb()
-    tunnel_info = "DIRECT LOCAL & GITHUB API SYNC"
+    tunnel_info = "DIRECT LOCAL MESH SYNC"
 
     banner = f"""
 ============================================================
@@ -91,11 +89,18 @@ def load_initial_state():
     return int(pulse_count), float(wh_consumed), float(flame_minted)
 
 def collect_telemetry_payload(node_id, pulse_count, hash_val, ram_mb, wh, minted, shard_name):
+    arch = platform.machine() or platform.architecture()[0]
+    os_info = f"{platform.system()} {platform.release()}"
+    
     return {
         "node_id": node_id,
-        "platform": platform.platform(),
-        "timestamp": time.time(),
+        "architecture": arch,
+        "os": os_info,
+        "system_ram": ram_mb,
         "pulse_count": pulse_count,
+        "wh": round(wh, 6),
+        "flame_minted": round(minted, 6),
+        "timestamp": time.time(),
         "proof_hash": hash_val,
         "energy_metrics": {
             "watt_hours_consumed": round(wh, 6),
@@ -118,7 +123,7 @@ def persist_local_state(payload):
     except Exception:
         pass
 
-def update_global_state_file(payload):
+def submit_telemetry(payload):
     try:
         global_data = {}
         if os.path.exists(GLOBAL_STATE_FILE):
@@ -130,75 +135,26 @@ def update_global_state_file(payload):
 
         nodes = global_data.get("nodes", {})
         nodes[payload["node_id"]] = {
-            "last_seen": payload["timestamp"],
+            "node_id": payload["node_id"],
+            "architecture": payload["architecture"],
+            "os": payload["os"],
+            "system_ram": payload["system_ram"],
             "pulse_count": payload["pulse_count"],
-            "watt_hours": payload["metrics"]["watt_hours_consumed"],
-            "flame_minted": payload["metrics"]["flame_minted"],
+            "wh": payload["wh"],
+            "flame_minted": payload["flame_minted"],
+            "timestamp": payload["timestamp"],
+            "proof_hash": payload["proof_hash"],
             "status": payload["status"]
         }
 
         global_data["nodes"] = nodes
-        global_data["last_updated"] = time.time()
+        global_data["last_updated"] = payload["timestamp"]
         global_data["total_active_nodes"] = len(nodes)
 
         with open(GLOBAL_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(global_data, f, indent=2)
     except Exception:
         pass
-
-def sync_github_api_async(payload):
-    def _worker():
-        token = os.getenv("GITHUB_TOKEN")
-        repo = os.getenv("GITHUB_REPOSITORY")
-        if not token or not repo:
-            return
-
-        try:
-            url = f"https://api.github.com/repos/{repo}/contents/global_network_state.json"
-            headers = {
-                "Authorization": f"token {token}",
-                "Accept": "application/vnd.github.v3+json",
-                "User-Agent": "FlameChain-Node"
-            }
-            
-            sha = None
-            req = urllib.request.Request(url, headers=headers)
-            try:
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    res_data = json.loads(resp.read().decode("utf-8"))
-                    sha = res_data.get("sha")
-            except Exception:
-                pass
-
-            if os.path.exists(GLOBAL_STATE_FILE):
-                with open(GLOBAL_STATE_FILE, "r", encoding="utf-8") as f:
-                    content_str = f.read()
-            else:
-                content_str = json.dumps({"nodes": {payload["node_id"]: payload}}, indent=2)
-
-            b64_content = base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
-            put_data = {
-                "message": f"telemetry: sync node {payload['node_id']} pulse #{payload['pulse_count']}",
-                "content": b64_content
-            }
-            if sha:
-                put_data["sha"] = sha
-
-            put_req = urllib.request.Request(
-                url,
-                data=json.dumps(put_data).encode("utf-8"),
-                headers=headers,
-                method="PUT"
-            )
-            with urllib.request.urlopen(put_req, timeout=5):
-                pass
-        except Exception:
-            pass
-
-    threading.Thread(target=_worker, daemon=True).start()
-
-def submit_telemetry(payload):
-    update_global_state_file(payload)
 
     if TELEMETRY_ENDPOINT and "loca.lt" not in TELEMETRY_ENDPOINT:
         try:
@@ -217,11 +173,9 @@ def submit_telemetry(payload):
         except Exception:
             pass
 
-    sync_github_api_async(payload)
-
 def run_pulse_loop(interval_seconds=5):
     node_id = os.getenv("FLAMECHAIN_NODE_ID", f"node-ios-{os.getpid()}")
-    ram_mb = 137760.00
+    ram_mb = detect_system_ram_mb()
 
     pulse_count, wh_consumed, flame_minted = load_initial_state()
     print_hardware_header(node_id, pulse_count, wh_consumed, flame_minted)
