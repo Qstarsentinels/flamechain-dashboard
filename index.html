@@ -163,11 +163,11 @@
         <table>
             <thead>
                 <tr>
-                    <th>Validator Key / Node Identifier</th>
+                    <th>Node Identifier</th>
                     <th>Status</th>
                     <th>RAM Allocated</th>
-                    <th>Energy Reserve</th>
-                    <th>Tokens Staked / Balance</th>
+                    <th>Energy Consumed</th>
+                    <th>Tokens Minted</th>
                 </tr>
             </thead>
             <tbody id="nodes-table-body">
@@ -180,21 +180,51 @@
     </div>
 
     <script>
-        function parseRamGb(value) {
-            if (typeof value === 'number') return value;
-            if (typeof value === 'string') {
-                const match = value.match(/([\d.]+)/);
-                return match ? parseFloat(match[1]) : 0;
+        function safeParseFloat(val) {
+            if (val === null || val === undefined) return 0;
+            if (typeof val === 'number') return isNaN(val) ? 0 : val;
+            if (typeof val === 'string') {
+                const match = val.match(/-?[\d.]+/);
+                return match ? parseFloat(match[0]) : 0;
             }
             return 0;
         }
 
-        function parseNumeric(value) {
-            if (typeof value === 'number') return value;
-            if (typeof value === 'string') {
-                const match = value.match(/([\d.]+)/);
-                return match ? parseFloat(match[1]) : 0;
+        function extractNodeRamGb(node) {
+            if (node.system_ram_mb !== undefined) {
+                return safeParseFloat(node.system_ram_mb) / 1024.0;
             }
+            if (node.ram_mb !== undefined) {
+                return safeParseFloat(node.ram_mb) / 1024.0;
+            }
+            if (node.ram_gb !== undefined) {
+                return safeParseFloat(node.ram_gb);
+            }
+            if (node.ram !== undefined) {
+                const parsed = safeParseFloat(node.ram);
+                return typeof node.ram === 'string' && node.ram.toLowerCase().includes('mb') ? parsed / 1024.0 : parsed;
+            }
+            if (node.system_ram !== undefined) {
+                return safeParseFloat(node.system_ram) / 1024.0;
+            }
+            return 0;
+        }
+
+        function extractNodeWh(node) {
+            if (node.wh_consumed !== undefined) return safeParseFloat(node.wh_consumed);
+            if (node.wh !== undefined) return safeParseFloat(node.wh);
+            if (node.watt_hours !== undefined) return safeParseFloat(node.watt_hours);
+            if (node.energy_wh !== undefined) return safeParseFloat(node.energy_wh);
+            if (node.watt_hours_reserve !== undefined) return safeParseFloat(node.watt_hours_reserve);
+            return 0;
+        }
+
+        function extractNodeMinted(node) {
+            if (node.flame_minted !== undefined) return safeParseFloat(node.flame_minted);
+            if (node.minted_tokens !== undefined) return safeParseFloat(node.minted_tokens);
+            if (node.balance !== undefined) return safeParseFloat(node.balance);
+            if (node.stake !== undefined) return safeParseFloat(node.stake);
+            if (node.tokens !== undefined) return safeParseFloat(node.tokens);
             return 0;
         }
 
@@ -210,15 +240,15 @@
                 data = await response.json();
                 sourceLabel = "./global_network_state.json";
             } catch (err) {
-                console.warn("Relative fetch failed, attempting local fallback API:", err);
+                console.warn("Relative fetch failed, attempting local API endpoint:", err);
                 try {
                     const fallback = await fetch('http://127.0.0.1:8546/api/state', { cache: 'no-cache' });
                     if (!fallback.ok) throw new Error(`HTTP ${fallback.status}`);
                     data = await fallback.json();
                     sourceLabel = "http://127.0.0.1:8546/api/state";
                 } catch (fallbackErr) {
-                    console.error("All telemetry sync attempts failed:", fallbackErr);
-                    updateStatus(false, "Offline / Connection Failed");
+                    console.error("All telemetry sources unavailable:", fallbackErr);
+                    updateStatus(false, "Offline / Sync Failed");
                     return;
                 }
             }
@@ -229,7 +259,6 @@
         function processAndRenderTelemetry(data, source) {
             updateStatus(true, `Synced via ${source}`);
 
-            // Extract nodes map or object
             let nodesMap = {};
             if (data.nodes && typeof data.nodes === 'object' && !Array.isArray(data.nodes)) {
                 nodesMap = data.nodes;
@@ -245,51 +274,53 @@
 
             const nodeEntries = Object.entries(nodesMap);
 
-            let computedGrossSupply = parseNumeric(data.gross_supply || data.total_supply || 0);
-            let computedTotalEnergyWh = parseNumeric(data.energy_wh || data.total_watt_hours || 0);
-            let computedTotalRamGb = parseRamGb(data.combined_mesh_memory_gb || data.total_network_ram_gb || 0);
-
-            let sumEnergyWh = 0;
-            let sumRamGb = 0;
-            let sumSupply = 0;
+            let calculatedGrossSupply = 0.0;
+            let calculatedEnergyWh = 0.0;
+            let calculatedRamGb = 0.0;
 
             const tbody = document.getElementById('nodes-table-body');
             tbody.innerHTML = '';
 
             if (nodeEntries.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No validator nodes found in state object.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No dynamic validator node telemetry detected.</td></tr>';
             } else {
-                nodeEntries.forEach(([nodeId, nodeData]) => {
-                    const nodeStatus = nodeData.status || nodeData.state || 'ACTIVE';
-                    const nodeRam = parseRamGb(nodeData.ram || nodeData.ram_gb || nodeData.memory || nodeData.total_ram || 0);
-                    const nodeEnergy = parseNumeric(nodeData.watt_hours || nodeData.energy_wh || nodeData.watt_hours_reserve || 0);
-                    const nodeBalance = parseNumeric(nodeData.balance || nodeData.stake || nodeData.tokens || 0);
+                nodeEntries.forEach(([key, nodeObj]) => {
+                    const nodeId = nodeObj.node_id || nodeObj.id || key;
+                    const nodeStatus = nodeObj.status || nodeObj.state || 'ACTIVE';
+                    
+                    const nodeMinted = extractNodeMinted(nodeObj);
+                    const nodeWh = extractNodeWh(nodeObj);
+                    const nodeRamGb = extractNodeRamGb(nodeObj);
 
-                    sumRamGb += nodeRam;
-                    sumEnergyWh += nodeEnergy;
-                    sumSupply += nodeBalance;
+                    calculatedGrossSupply += nodeMinted;
+                    calculatedEnergyWh += nodeWh;
+                    calculatedRamGb += nodeRamGb;
 
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td style="font-family: monospace;">${nodeId}</td>
+                        <td style="font-family: monospace; font-weight: bold;">${nodeId}</td>
                         <td><span style="color: ${nodeStatus.includes('ACTIVE') ? 'var(--success-green)' : 'var(--text-secondary)'}; font-weight: bold;">${nodeStatus}</span></td>
-                        <td>${nodeRam ? nodeRam + ' GB' : 'N/A'}</td>
-                        <td>${nodeEnergy ? nodeEnergy.toLocaleString() + ' Wh' : 'N/A'}</td>
-                        <td>${nodeBalance ? nodeBalance.toLocaleString() + ' FLAME' : 'N/A'}</td>
+                        <td>${nodeRamGb > 0 ? nodeRamGb.toFixed(2) + ' GB' : 'N/A'}</td>
+                        <td>${nodeWh > 0 ? nodeWh.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 3}) + ' Wh' : 'N/A'}</td>
+                        <td>${nodeMinted > 0 ? nodeMinted.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 4}) + ' FLAME' : 'N/A'}</td>
                     `;
                     tbody.appendChild(tr);
                 });
             }
 
-            // Fall back to aggregated sums if top-level values were not pre-calculated in JSON
-            const finalSupply = computedGrossSupply > 0 ? computedGrossSupply : sumSupply;
-            const finalEnergy = computedTotalEnergyWh > 0 ? computedTotalEnergyWh : sumEnergyWh;
-            const finalRam = computedTotalRamGb > 0 ? computedTotalRamGb : sumRamGb;
+            // Fallback to top-level json properties if nodes map is empty or unpopulated
+            const topLevelSupply = safeParseFloat(data.gross_supply || data.total_supply);
+            const topLevelWh = safeParseFloat(data.energy_wh || data.total_watt_hours);
+            const topLevelRam = safeParseFloat(data.combined_mesh_memory_gb || data.total_network_ram_gb);
 
-            document.getElementById('gross-supply').innerText = finalSupply.toLocaleString();
-            document.getElementById('energy-wh').innerText = finalEnergy.toLocaleString();
-            document.getElementById('mesh-memory').innerText = finalRam.toLocaleString();
-            document.getElementById('data-source').innerText = `Data Source: ${source} | Calculated across ${nodeEntries.length} node(s)`;
+            const finalSupply = calculatedGrossSupply > 0 ? calculatedGrossSupply : topLevelSupply;
+            const finalWh = calculatedEnergyWh > 0 ? calculatedEnergyWh : topLevelWh;
+            const finalRam = calculatedRamGb > 0 ? calculatedRamGb : topLevelRam;
+
+            document.getElementById('gross-supply').innerText = finalSupply.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4});
+            document.getElementById('energy-wh').innerText = finalWh.toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 3});
+            document.getElementById('mesh-memory').innerText = finalRam.toFixed(2);
+            document.getElementById('data-source').innerText = `Data Source: ${source} | Aggregated ${nodeEntries.length} Node Telemetry Stream(s)`;
         }
 
         function updateStatus(online, message) {
@@ -308,7 +339,6 @@
             }
         }
 
-        // Initialize and bind recurring 5s sync loop
         fetchTelemetry();
         setInterval(fetchTelemetry, 5000);
     </script>
