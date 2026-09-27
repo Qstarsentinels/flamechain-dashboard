@@ -10,6 +10,21 @@ TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_URL", "http://127.0.0.1:8546/telemetry
 LOCAL_STATE_FILE = "node_state.json"
 GLOBAL_STATE_FILE = "global_network_state.json"
 
+def print_hardware_header(node_id, ram_mb):
+    banner = f"""
+============================================================
+🔥 FLAMECHAIN AGI SINGULARITY MESH NODE
+============================================================
+Node ID               : {node_id}
+Platform Architecture : {platform.platform()}
+System Python         : {platform.python_version()}
+Dynamic Shard RAM     : {ram_mb:,.2f} MB
+Target Ingest URL     : {TELEMETRY_ENDPOINT or 'DISABLED (OFFLINE MINTING)'}
+Local State Path      : {os.path.abspath(LOCAL_STATE_FILE)}
+============================================================
+"""
+    print(banner.strip(), flush=True)
+
 def load_initial_state():
     pulse_count = 0
     wh_consumed = 0.0
@@ -48,13 +63,12 @@ def load_initial_state():
                 )
                 flame_minted = float(minted_val)
 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[State Boot Warning] Exception parsing {LOCAL_STATE_FILE}: {e}. Initializing default state.", flush=True)
 
     return int(pulse_count), float(wh_consumed), float(flame_minted)
 
-def collect_telemetry_payload(pulse_count, hash_val, ram_mb, wh, minted, shard_name):
-    node_id = os.getenv("FLAMECHAIN_NODE_ID", f"node-ios-{os.getpid()}")
+def collect_telemetry_payload(node_id, pulse_count, hash_val, ram_mb, wh, minted, shard_name):
     return {
         "node_id": node_id,
         "platform": platform.platform(),
@@ -81,6 +95,24 @@ def persist_local_state(payload):
             json.dump(payload, f, indent=2)
     except Exception:
         pass
+
+def submit_telemetry(payload):
+    if TELEMETRY_ENDPOINT:
+        try:
+            encoded_data = json.dumps(payload).encode("utf-8")
+            request = urllib.request.Request(
+                TELEMETRY_ENDPOINT,
+                data=encoded_data,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "FlameChain-MobileNode/1.0"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(request, timeout=1) as response:
+                return
+        except Exception:
+            pass
 
     try:
         global_data = {}
@@ -109,35 +141,16 @@ def persist_local_state(payload):
     except Exception:
         pass
 
-def submit_telemetry(payload):
-    if not TELEMETRY_ENDPOINT:
-        print("[Telemetry Offline] Local state saved.", flush=True)
-        return
-
-    try:
-        encoded_data = json.dumps(payload).encode("utf-8")
-        request = urllib.request.Request(
-            TELEMETRY_ENDPOINT,
-            data=encoded_data,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "FlameChain-MobileNode/1.0"
-            },
-            method="POST"
-        )
-        with urllib.request.urlopen(request, timeout=1) as response:
-            pass
-    except Exception:
-        print("[Telemetry Offline] Local state saved.", flush=True)
-
 def run_pulse_loop(interval_seconds=5):
-    pulse_count, wh_consumed, flame_minted = load_initial_state()
-    
     node_id = os.getenv("FLAMECHAIN_NODE_ID", f"node-ios-{os.getpid()}")
-    shards = ["shard-0-embed", "shard-1-attn", "shard-2-mlp", "shard-3-norm"]
     ram_mb = 137760.00
 
-    print(f"[FlameChain Boot] Restored state -> Pulse: #{pulse_count} | Wh: {wh_consumed:.6f} | FLAME: {flame_minted:.6f}", flush=True)
+    print_hardware_header(node_id, ram_mb)
+
+    pulse_count, wh_consumed, flame_minted = load_initial_state()
+    print(f"[FlameChain Bootloader] Restored State -> Pulse: #{pulse_count} | Wh: {wh_consumed:.6f} | FLAME: {flame_minted:.6f}\n", flush=True)
+
+    shards = ["shard-0-embed", "shard-1-attn", "shard-2-mlp", "shard-3-norm"]
 
     while True:
         pulse_count += 1
@@ -152,7 +165,7 @@ def run_pulse_loop(interval_seconds=5):
 
         print(f"[⚡ PULSE #{pulse_count}] Hash: {hash_val[:16]}... | RAM: {ram_mb:.2f} MB | Wh: {wh_consumed:.6f} | Minted: {flame_minted:.4f} FLAME | Shard: {shard_name}", flush=True)
 
-        payload = collect_telemetry_payload(pulse_count, hash_val, ram_mb, wh_consumed, flame_minted, shard_name)
+        payload = collect_telemetry_payload(node_id, pulse_count, hash_val, ram_mb, wh_consumed, flame_minted, shard_name)
         persist_local_state(payload)
         submit_telemetry(payload)
         
