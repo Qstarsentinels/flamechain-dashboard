@@ -1,205 +1,96 @@
-import json
 import os
-import platform
+import json
 import time
-import hashlib
-import urllib.error
-import urllib.request
+import platform
 
-TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_URL", "http://127.0.0.1:8546/telemetry/submit")
-LOCAL_STATE_FILE = "node_state.json"
+NODE_STATE_FILE = "node_state.json"
 GLOBAL_STATE_FILE = "global_network_state.json"
 
-def detect_system_ram_mb():
+def read_json_file(filepath):
+    if not os.path.exists(filepath):
+        return {}
     try:
-        with open("/proc/meminfo", "r") as f:
-            for line in f:
-                if "MemTotal" in line:
-                    kb = int(line.split()[1])
-                    return round(kb / 1024.0, 2)
-    except Exception:
-        pass
-    return 137760.00
+        with open(filepath, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[WARN] Failed to read {filepath}: {e}")
+        return {}
 
-def print_hardware_header(node_id, pulse_count, wh_consumed, flame_minted):
-    arch = platform.machine() or platform.architecture()[0]
-    os_info = f"{platform.system()} {platform.release()}"
-    sys_ram = detect_system_ram_mb()
-    tunnel_info = "DIRECT LOCAL MESH SYNC"
-
-    banner = f"""
-============================================================
-🔥 FLAMECHAIN AGI SINGULARITY MESH NODE
-============================================================
-Node ID               : {node_id}
-Architecture          : {arch}
-OS                    : {os_info}
-System RAM            : {sys_ram:,.2f} MB
-Primary Tunnel        : {tunnel_info}
-------------------------------------------------------------
-[BOOTLOADER RESTORED STATE SUMMARY]
-Pulse Count           : #{pulse_count}
-Energy Consumed       : {wh_consumed:.6f} Wh
-Tokens Minted         : {flame_minted:.6f} FLAME
-============================================================
-"""
-    print(banner.strip(), flush=True)
-
-def load_initial_state():
-    pulse_count = 0
-    wh_consumed = 0.0
-    flame_minted = 0.0
-
-    if os.path.exists(LOCAL_STATE_FILE):
-        try:
-            with open(LOCAL_STATE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            if isinstance(data, dict):
-                pulse_count = data.get("pulse_count") or data.get("pulse") or 0
-
-                metrics = data.get("metrics", {}) if isinstance(data.get("metrics"), dict) else {}
-                energy_metrics = data.get("energy_metrics", {}) if isinstance(data.get("energy_metrics"), dict) else {}
-
-                wh_val = (
-                    data.get("watt_hours_consumed") or
-                    data.get("wh_consumed") or
-                    metrics.get("watt_hours_consumed") or
-                    metrics.get("wh_consumed") or
-                    energy_metrics.get("watt_hours_consumed") or
-                    energy_metrics.get("wh_consumed") or
-                    0.0
-                )
-                wh_consumed = float(wh_val)
-
-                minted_val = (
-                    data.get("flame_minted") or
-                    data.get("minted") or
-                    metrics.get("flame_minted") or
-                    metrics.get("minted") or
-                    energy_metrics.get("flame_minted") or
-                    energy_metrics.get("minted") or
-                    0.0
-                )
-                flame_minted = float(minted_val)
-
-        except Exception:
-            pass
-
-    return int(pulse_count), float(wh_consumed), float(flame_minted)
-
-def collect_telemetry_payload(node_id, pulse_count, hash_val, ram_mb, wh, minted, shard_name):
-    arch = platform.machine() or platform.architecture()[0]
-    os_info = f"{platform.system()} {platform.release()}"
-    
-    return {
-        "node_id": node_id,
-        "architecture": arch,
-        "os": os_info,
-        "system_ram": ram_mb,
-        "pulse_count": pulse_count,
-        "wh": round(wh, 6),
-        "flame_minted": round(minted, 6),
-        "timestamp": time.time(),
-        "proof_hash": hash_val,
-        "energy_metrics": {
-            "watt_hours_consumed": round(wh, 6),
-            "flame_minted": round(minted, 6)
-        },
-        "metrics": {
-            "watt_hours_consumed": round(wh, 6),
-            "flame_minted": round(minted, 6),
-            "allocated_ram_mb": ram_mb,
-            "shard_name": shard_name,
-            "shard_processing_rate_tps": 48.2
-        },
-        "status": "HEALTHY"
-    }
-
-def persist_local_state(payload):
+def write_json_file(filepath, data):
     try:
-        with open(LOCAL_STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-    except Exception:
-        pass
+        tmp_file = f"{filepath}.tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_file, filepath)
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to write {filepath}: {e}")
+        return False
 
-def submit_telemetry(payload):
+def submit_telemetry():
     try:
-        global_data = {}
-        if os.path.exists(GLOBAL_STATE_FILE):
-            try:
-                with open(GLOBAL_STATE_FILE, "r", encoding="utf-8") as f:
-                    global_data = json.load(f)
-            except Exception:
-                global_data = {}
+        # Dynamically read local node_state.json
+        local_state = read_json_file(NODE_STATE_FILE)
 
-        nodes = global_data.get("nodes", {})
-        nodes[payload["node_id"]] = {
-            "node_id": payload["node_id"],
-            "architecture": payload["architecture"],
-            "os": payload["os"],
-            "system_ram": payload["system_ram"],
-            "pulse_count": payload["pulse_count"],
-            "wh": payload["wh"],
-            "flame_minted": payload["flame_minted"],
-            "timestamp": payload["timestamp"],
-            "proof_hash": payload["proof_hash"],
-            "status": payload["status"]
+        # Extract required metrics with safe fallbacks
+        node_id = str(local_state.get("node_id", "ipad-validator-node"))
+        architecture = str(local_state.get("architecture", platform.machine() or "arm64"))
+        node_os = str(local_state.get("os", platform.system() or "iOS/Darwin"))
+        system_ram_mb = int(local_state.get("system_ram_mb", local_state.get("ram_mb", 4096)))
+        pulse_count = int(local_state.get("pulse_count", local_state.get("pulses", 0)))
+        wh_consumed = float(local_state.get("wh_consumed", local_state.get("watt_hours", 0.0)))
+        flame_minted = float(local_state.get("flame_minted", local_state.get("balance", 0.0)))
+        timestamp = float(local_state.get("timestamp", time.time()))
+
+        node_telemetry = {
+            "node_id": node_id,
+            "architecture": architecture,
+            "os": node_os,
+            "system_ram_mb": system_ram_mb,
+            "pulse_count": pulse_count,
+            "wh_consumed": wh_consumed,
+            "flame_minted": flame_minted,
+            "timestamp": timestamp,
+            "status": local_state.get("status", "ACTIVE")
         }
 
-        global_data["nodes"] = nodes
-        global_data["last_updated"] = payload["timestamp"]
-        global_data["total_active_nodes"] = len(nodes)
+        # Read existing global network state or initialize
+        global_state = read_json_file(GLOBAL_STATE_FILE)
+        if not isinstance(global_state, dict):
+            global_state = {}
 
-        with open(GLOBAL_STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump(global_data, f, indent=2)
-    except Exception:
-        pass
+        if "nodes" not in global_state or not isinstance(global_state["nodes"], dict):
+            global_state["nodes"] = {}
 
-    if TELEMETRY_ENDPOINT and "loca.lt" not in TELEMETRY_ENDPOINT:
-        try:
-            encoded_data = json.dumps(payload).encode("utf-8")
-            request = urllib.request.Request(
-                TELEMETRY_ENDPOINT,
-                data=encoded_data,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "FlameChain-MobileNode/1.0"
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(request, timeout=1):
-                pass
-        except Exception:
-            pass
+        # Update specific node entry inside global network state
+        global_state["nodes"][node_id] = node_telemetry
 
-def run_pulse_loop(interval_seconds=5):
-    node_id = os.getenv("FLAMECHAIN_NODE_ID", f"node-ios-{os.getpid()}")
-    ram_mb = detect_system_ram_mb()
+        # Dynamically compute global aggregates across all active nodes
+        total_wh = 0.0
+        total_flame = 0.0
+        total_ram_mb = 0
 
-    pulse_count, wh_consumed, flame_minted = load_initial_state()
-    print_hardware_header(node_id, pulse_count, wh_consumed, flame_minted)
+        for n_id, n_data in global_state["nodes"].items():
+            if isinstance(n_data, dict):
+                total_wh += float(n_data.get("wh_consumed", 0.0))
+                total_flame += float(n_data.get("flame_minted", 0.0))
+                total_ram_mb += int(n_data.get("system_ram_mb", 0))
 
-    shards = ["shard-0-embed", "shard-1-attn", "shard-2-mlp", "shard-3-norm"]
+        global_state["energy_wh"] = round(total_wh, 4)
+        global_state["gross_supply"] = round(total_flame, 4)
+        global_state["combined_mesh_memory_gb"] = round(total_ram_mb / 1024.0, 2)
+        global_state["last_updated"] = time.time()
 
-    while True:
-        pulse_count += 1
-        
-        delta_wh = 0.000150
-        wh_consumed += delta_wh
-        delta_minted = 0.812500
-        flame_minted += delta_minted
+        # Commit update to global state file
+        success = write_json_file(GLOBAL_STATE_FILE, global_state)
+        if success:
+            print(f"[INFO] Telemetry successfully synchronized for node: {node_id}")
+        return success
 
-        hash_val = hashlib.sha256(f"{node_id}-{pulse_count}-{time.time()}".encode("utf-8")).hexdigest()
-        shard_name = shards[pulse_count % len(shards)]
-
-        print(f"[⚡ PULSE #{pulse_count}] Hash: {hash_val[:16]}... | RAM: {ram_mb:.2f} MB | Wh: {wh_consumed:.6f} | Minted: {flame_minted:.4f} FLAME | Shard: {shard_name}", flush=True)
-
-        payload = collect_telemetry_payload(node_id, pulse_count, hash_val, ram_mb, wh_consumed, flame_minted, shard_name)
-        persist_local_state(payload)
-        submit_telemetry(payload)
-        
-        time.sleep(interval_seconds)
+    except Exception as e:
+        # Non-blocking log to ensure no network or runtime errors break execution
+        print(f"[ERROR] Non-fatal exception in submit_telemetry: {e}")
+        return False
 
 if __name__ == "__main__":
-    run_pulse_loop()
+    submit_telemetry()
