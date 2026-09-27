@@ -3,6 +3,8 @@ import os
 import platform
 import time
 import hashlib
+import threading
+import base64
 import urllib.error
 import urllib.request
 
@@ -10,17 +12,37 @@ TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_URL", "http://127.0.0.1:8546/telemetry
 LOCAL_STATE_FILE = "node_state.json"
 GLOBAL_STATE_FILE = "global_network_state.json"
 
-def print_hardware_header(node_id, ram_mb):
+def detect_system_ram_mb():
+    try:
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if "MemTotal" in line:
+                    kb = int(line.split()[1])
+                    return round(kb / 1024.0, 2)
+    except Exception:
+        pass
+    return 137760.00
+
+def print_hardware_header(node_id, pulse_count, wh_consumed, flame_minted):
+    arch = platform.machine() or platform.architecture()[0]
+    os_info = f"{platform.system()} {platform.release()}"
+    sys_ram = detect_system_ram_mb()
+    tunnel_info = "DIRECT LOCAL & GITHUB API SYNC"
+
     banner = f"""
 ============================================================
 🔥 FLAMECHAIN AGI SINGULARITY MESH NODE
 ============================================================
 Node ID               : {node_id}
-Platform Architecture : {platform.platform()}
-System Python         : {platform.python_version()}
-Dynamic Shard RAM     : {ram_mb:,.2f} MB
-Target Ingest URL     : {TELEMETRY_ENDPOINT or 'DISABLED (OFFLINE MINTING)'}
-Local State Path      : {os.path.abspath(LOCAL_STATE_FILE)}
+Architecture          : {arch}
+OS                    : {os_info}
+System RAM            : {sys_ram:,.2f} MB
+Primary Tunnel        : {tunnel_info}
+------------------------------------------------------------
+[BOOTLOADER RESTORED STATE SUMMARY]
+Pulse Count           : #{pulse_count}
+Energy Consumed       : {wh_consumed:.6f} Wh
+Tokens Minted         : {flame_minted:.6f} FLAME
 ============================================================
 """
     print(banner.strip(), flush=True)
@@ -63,8 +85,8 @@ def load_initial_state():
                 )
                 flame_minted = float(minted_val)
 
-        except Exception as e:
-            print(f"[State Boot Warning] Exception parsing {LOCAL_STATE_FILE}: {e}. Initializing default state.", flush=True)
+        except Exception:
+            pass
 
     return int(pulse_count), float(wh_consumed), float(flame_minted)
 
@@ -96,24 +118,7 @@ def persist_local_state(payload):
     except Exception:
         pass
 
-def submit_telemetry(payload):
-    if TELEMETRY_ENDPOINT:
-        try:
-            encoded_data = json.dumps(payload).encode("utf-8")
-            request = urllib.request.Request(
-                TELEMETRY_ENDPOINT,
-                data=encoded_data,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "FlameChain-MobileNode/1.0"
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(request, timeout=1) as response:
-                return
-        except Exception:
-            pass
-
+def update_global_state_file(payload):
     try:
         global_data = {}
         if os.path.exists(GLOBAL_STATE_FILE):
@@ -141,14 +146,85 @@ def submit_telemetry(payload):
     except Exception:
         pass
 
+def sync_github_api_async(payload):
+    def _worker():
+        token = os.getenv("GITHUB_TOKEN")
+        repo = os.getenv("GITHUB_REPOSITORY")
+        if not token or not repo:
+            return
+
+        try:
+            url = f"https://api.github.com/repos/{repo}/contents/global_network_state.json"
+            headers = {
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "FlameChain-Node"
+            }
+            
+            sha = None
+            req = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=3) as resp:
+                    res_data = json.loads(resp.read().decode("utf-8"))
+                    sha = res_data.get("sha")
+            except Exception:
+                pass
+
+            if os.path.exists(GLOBAL_STATE_FILE):
+                with open(GLOBAL_STATE_FILE, "r", encoding="utf-8") as f:
+                    content_str = f.read()
+            else:
+                content_str = json.dumps({"nodes": {payload["node_id"]: payload}}, indent=2)
+
+            b64_content = base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
+            put_data = {
+                "message": f"telemetry: sync node {payload['node_id']} pulse #{payload['pulse_count']}",
+                "content": b64_content
+            }
+            if sha:
+                put_data["sha"] = sha
+
+            put_req = urllib.request.Request(
+                url,
+                data=json.dumps(put_data).encode("utf-8"),
+                headers=headers,
+                method="PUT"
+            )
+            with urllib.request.urlopen(put_req, timeout=5):
+                pass
+        except Exception:
+            pass
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+def submit_telemetry(payload):
+    update_global_state_file(payload)
+
+    if TELEMETRY_ENDPOINT and "loca.lt" not in TELEMETRY_ENDPOINT:
+        try:
+            encoded_data = json.dumps(payload).encode("utf-8")
+            request = urllib.request.Request(
+                TELEMETRY_ENDPOINT,
+                data=encoded_data,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "FlameChain-MobileNode/1.0"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(request, timeout=1):
+                pass
+        except Exception:
+            pass
+
+    sync_github_api_async(payload)
+
 def run_pulse_loop(interval_seconds=5):
     node_id = os.getenv("FLAMECHAIN_NODE_ID", f"node-ios-{os.getpid()}")
     ram_mb = 137760.00
 
-    print_hardware_header(node_id, ram_mb)
-
     pulse_count, wh_consumed, flame_minted = load_initial_state()
-    print(f"[FlameChain Bootloader] Restored State -> Pulse: #{pulse_count} | Wh: {wh_consumed:.6f} | FLAME: {flame_minted:.6f}\n", flush=True)
+    print_hardware_header(node_id, pulse_count, wh_consumed, flame_minted)
 
     shards = ["shard-0-embed", "shard-1-attn", "shard-2-mlp", "shard-3-norm"]
 
