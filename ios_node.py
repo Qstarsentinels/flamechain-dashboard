@@ -2,7 +2,7 @@
 """
 FlameChain iPad Node Validator
 Backed by System RAM and Watt-Hour Proof-of-Work / Proof-of-Energy Pulses
-Dynamic dual gateway fallback (loca.lt tunnel & LAN IP) with full session restart persistence.
+Direct local state persistence, background network telemetry submit, and direct local global_network_state.json updater.
 """
 
 import os
@@ -18,13 +18,11 @@ import resource
 import urllib.request
 import urllib.error
 
-# Storage and network parameters
+# Local storage paths and network endpoints
 STATE_FILE = "node_state.json"
 GLOBAL_STATE_FILE = "global_network_state.json"
 SNAPSHOT_FILE = "node_telemetry_snapshot.json"
-
-PRIMARY_TUNNEL_URL = "https://flamechain.loca.lt/telemetry/submit"
-FALLBACK_LAN_URL = "http://172.20.10.1:8546/telemetry/submit"
+PRIMARY_LAN_URL = "http://172.20.10.1:8546/telemetry/submit"
 
 SHARD_MODELS = [
     "shard_0_vision_encoder.bin",
@@ -34,12 +32,7 @@ SHARD_MODELS = [
 ]
 
 def get_telemetry_urls():
-    """
-    Returns telemetry URLs list in order of precedence:
-    1. GATEWAY_URL env variable (if set)
-    2. Primary Tunnel: https://flamechain.loca.lt/telemetry/submit
-    3. Fallback LAN: http://172.20.10.1:8546/telemetry/submit
-    """
+    """Returns target endpoints for background telemetry."""
     urls = []
     env_url = os.environ.get("GATEWAY_URL")
     if env_url:
@@ -49,8 +42,8 @@ def get_telemetry_urls():
             env_url = env_url.rstrip("/") + "/telemetry/submit"
         urls.append(env_url)
 
-    urls.append(PRIMARY_TUNNEL_URL)
-    urls.append(FALLBACK_LAN_URL)
+    urls.append(PRIMARY_LAN_URL)
+    urls.append("http://127.0.0.1:8546/telemetry/submit")
     return urls
 
 def get_total_ram_mb():
@@ -105,8 +98,8 @@ def detect_device_specs():
 
 def merge_telemetry_to_global_state_direct(payload):
     """
-    Directly updates global_network_state.json on disk if present.
-    Also writes standalone node_telemetry_snapshot.json.
+    Directly merges node telemetry into global_network_state.json on local disk.
+    Ensures state is instantly updated and available for local UI serving and git commits.
     """
     node_id = payload.get("node_id")
     snapshot_data = {
@@ -133,6 +126,7 @@ def merge_telemetry_to_global_state_direct(payload):
 
             global_state["active_nodes"][node_id] = snapshot_data
 
+            # Re-calculate aggregate global metrics
             nodes_list = list(global_state["active_nodes"].values())
             global_state["total_active_nodes"] = len(nodes_list)
             global_state["total_gross_supply"] = round(sum(float(n.get("minted_flame_units", 0.0)) for n in nodes_list), 4)
@@ -157,34 +151,29 @@ def merge_telemetry_to_global_state_direct(payload):
 
 def send_telemetry_async(payload, pulse_count):
     """
-    Non-blocking async telemetry thread.
-    Tries primary tunnel endpoint first (https://flamechain.loca.lt/telemetry/submit),
-    then falls back to LAN IP (http://172.20.10.1:8546/telemetry/submit).
-    Every 5 pulses, updates local state files directly.
+    Non-blocking async telemetry worker thread.
+    Directly updates local global_network_state.json file on disk every pulse.
+    Attempts POST to available network endpoints in background without interrupting execution.
     """
     def _post_task():
-        if pulse_count % 5 == 0:
-            merge_telemetry_to_global_state_direct(payload)
+        # Update local global_network_state.json directly
+        merge_telemetry_to_global_state_direct(payload)
 
+        # Background POST attempt
         data = json.dumps(payload).encode('utf-8')
-        target_urls = get_telemetry_urls()
-
-        for url in target_urls:
+        for url in get_telemetry_urls():
             try:
                 req = urllib.request.Request(
                     url,
                     data=data,
-                    headers={
-                        'Content-Type': 'application/json',
-                        'Bypass-Tunnel-Remainder': 'true'
-                    },
+                    headers={'Content-Type': 'application/json'},
                     method='POST'
                 )
-                with urllib.request.urlopen(req, timeout=2.5) as resp:
+                with urllib.request.urlopen(req, timeout=1.5) as resp:
                     if resp.status in (200, 201):
-                        return  # Successfully delivered telemetry
+                        return
             except Exception:
-                continue  # Fallthrough to next gateway URL on timeout/error
+                continue
 
     thread = threading.Thread(target=_post_task, daemon=True)
     thread.start()
@@ -206,10 +195,9 @@ def save_local_state(state_dict):
 
 def load_initial_state():
     """
-    State bootloader logic:
-    Checks if node_state.json exists on disk.
-    Loads accumulated_wh, pulse_count, minted_flame_units into memory on boot.
-    Prevents loss of progress on process restart.
+    State Persistence Bootloader:
+    Reads node_state.json upon launch. Restores accumulated_wh, pulse_count, and minted_flame_units into memory.
+    Guarantees zero progress or tokens are lost on node restart.
     """
     if os.path.exists(STATE_FILE):
         try:
@@ -221,9 +209,9 @@ def load_initial_state():
                 active_shard_id = data.get("active_shard_id", SHARD_MODELS[0])
                 print("==================================================")
                 print(f"[+] BOOTLOADER: PERSISTED STATE RESTORED FROM {STATE_FILE}")
-                print(f"    - Pulse Count        : #{pulse_count}")
+                print(f"    - Resuming Pulse #  : {pulse_count}")
                 print(f"    - Accumulated Energy : {accumulated_wh:.6f} Wh")
-                print(f"    - Total Minted Tokens: {minted_flame_units:.4f} FLAME")
+                print(f"    - Total Minted FLAME : {minted_flame_units:.4f}")
                 print("==================================================\n")
                 return pulse_count, accumulated_wh, minted_flame_units, active_shard_id
         except Exception as e:
@@ -234,7 +222,6 @@ def load_initial_state():
 
 def run_validator():
     specs = detect_device_specs()
-    urls = get_telemetry_urls()
     print("==================================================")
     print("       FLAMECHAIN IPAD VALIDATOR NODE ONLINE       ")
     print("==================================================")
@@ -242,11 +229,10 @@ def run_validator():
     print(f" Architecture    : {specs['architecture']}")
     print(f" OS              : {specs['os_system']}")
     print(f" System RAM      : {specs['total_mb_ram']} MB")
-    print(f" Primary Tunnel  : {urls[0]}")
-    print(f" Fallback LAN IP : {PRIMARY_TUNNEL_URL if len(urls) > 1 else 'None'}")
+    print(f" LAN Telemetry   : {PRIMARY_LAN_URL}")
     print("==================================================")
 
-    # State bootloader persistence
+    # State bootloader persistence restoration
     pulse_count, accumulated_wh, minted_flame_units, restored_shard_id = load_initial_state()
 
     active_shard_idx = 0
@@ -267,27 +253,27 @@ def run_validator():
             active_shard_id = SHARD_MODELS[active_shard_idx]
             print(f"\n[\U0001f504 SHARD HOT-SWAP] Active Shard Changed -> ({active_shard_idx + 1}/{len(SHARD_MODELS)}): {active_shard_id}")
 
-        # Compute block hash
+        # Compute SHA-256 block hash
         pulse_data = f"{pulse_count}:{last_hash}:{active_shard_id}:{specs['node_id']}:{pulse_start}"
         pulse_hash = hashlib.sha256(pulse_data.encode('utf-8')).hexdigest()
         last_hash = pulse_hash
 
-        # Execute work cycle
+        # Execute compute pulse duration
         time.sleep(0.5)
         elapsed = time.time() - pulse_start
 
-        # Compute dynamic resource & energy metrics
+        # Dynamic resource & energy calculations
         ram_used_mb = get_current_ram_usage_mb()
         wh_delta = (baseline_power_watts * elapsed) / 3600.0
         accumulated_wh += wh_delta
 
-        # Continuous minting rewards calculation
+        # Continuous minting reward equation
         minted_flame_units = (accumulated_wh * 1000.0) + (ram_used_mb * 0.01)
 
         # Deterministic State Root
         state_root = compute_deterministic_state_root(pulse_count, accumulated_wh, active_shard_id)
 
-        # Build local state dict
+        # Local state payload
         local_state = {
             "node_specs": specs,
             "pulse_count": pulse_count,
@@ -319,7 +305,7 @@ def run_validator():
         # Trigger async telemetry worker
         send_telemetry_async(telemetry_payload, pulse_count)
 
-        # Print continuous pulse stdout
+        # Terminal output
         print(f"[\u26a1 PULSE #{pulse_count}] Hash: {pulse_hash[:16]}... | RAM: {ram_used_mb:.2f} MB | Wh: {accumulated_wh:.6f} | Minted: {minted_flame_units:.4f} FLAME | Shard: {active_shard_id}")
 
 if __name__ == "__main__":
