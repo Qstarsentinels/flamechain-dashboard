@@ -1,6 +1,6 @@
 {
   "network": "FlameChain-Mesh-1",
-  "updated_at": 1790592015.7042606,
+  "updated_at": 1790592027.2112114,
   "active_node_count": 1,
   "totals": {
     "total_ram_mb": 0.0,
@@ -9,13 +9,20 @@
   },
   "nodes": {
     "ipad-edge-alpha-01": {
-      "pulse": 0,
-      "hash": "",
-      "ram_mb": 0.0,
-      "wh": 0.0,
-      "flame": 0.0,
-      "shard": "SHARD-UNKNOWN",
-      "last_seen": 1790592015.7042606
+      "node_id": "ipad-edge-alpha-01",
+      "node_type": "VALIDATOR",
+      "watt_hours": 0.32534999999999953,
+      "flame_tokens": 220.1149085937293,
+      "total_wh_minted": 0.32534999999999953,
+      "total_flame_earnings": 220.1149085937293,
+      "available_ram_mb": 3420,
+      "ram_allocated_mb": 3420,
+      "active_shards": [
+        "shard_llama3_8b_layer_12_16"
+      ],
+      "mesh_role": "inference_worker",
+      "ipfs_ipns_key": "k51qzi5uqu5dl11flamechain_validator_key_ipad_alpha"
     }
-  }
+  },
+  "last_updated": 1790592027.2180636
 }
