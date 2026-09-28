@@ -1,1 +1,1 @@
-{"mesh_status": "ONLINE", "combined_ram_gb": 8.0, "llm_agents": ["FlameGPT", "Sovereign"], "agents": ["Oracle", "Alchemist", "Sentinel"]}
+{"mesh_status": "ONLINE", "interconnected": true, "llm_agents": ["FlameGPT", "Sovereign"], "active_agents": ["Oracle", "Alchemist", "Sentinel"]}
