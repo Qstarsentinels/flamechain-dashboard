@@ -27,14 +27,53 @@ class FlameNode:
         self.tab_ip = os.getenv("TAB_IP", "127.0.0.1")
         self.endpoint = f"http://{self.tab_ip}:8080/api/telemetry"
         self.fallback_file = "telemetry_fallback.json"
+        self.state_file = "node_state.json"
+        
+        self.audit_initial_state()
 
     def get_system_ram_mb(self) -> float:
         if psutil:
             return psutil.virtual_memory().used / (1024 * 1024)
         return 512.00
 
+    def audit_initial_state(self):
+        """Read node_state.json and preserve maximum historical state."""
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    state_data = json.load(f)
+                    existing_wh = float(state_data.get("wh", 0.0))
+                    existing_flame = float(state_data.get("flame", 0.0))
+                    existing_count = int(state_data.get("count", 0))
+
+                    self.wh = max(existing_wh, self.wh)
+                    self.flame = max(existing_flame, self.flame)
+                    self.count = max(existing_count, self.count)
+                    
+                    print(
+                        f"[STATE RESTORED] Loaded from {self.state_file} | "
+                        f"Pulse: {self.count} | Wh: {self.wh:.6f} | FLAME: {self.flame:.6f}"
+                    )
+            except Exception as e:
+                print(f"[WARN] Failed to audit initial state from {self.state_file}: {e}", file=sys.stderr)
+
+    def persist_state(self):
+        """Save current pulse state locally."""
+        state_payload = {
+            "node_id": self.node_id,
+            "count": self.count,
+            "wh": self.wh,
+            "flame": self.flame,
+            "updated_at": time.time()
+        }
+        try:
+            with open(self.state_file, "w") as f:
+                json.dump(state_payload, f, indent=2)
+        except OSError as e:
+            print(f"[WARN] Failed to write {self.state_file}: {e}", file=sys.stderr)
+
     def submit_telemetry(self, payload: dict) -> bool:
-        """Attempt POST to central telemetry server, falling back to local storage on failure."""
+        """POST telemetry payload to central server, falling back to disk on failure."""
         data = json.dumps(payload).encode('utf-8')
         req = urllib.request.Request(
             self.endpoint,
@@ -50,7 +89,7 @@ class FlameNode:
         except (urllib.error.URLError, OSError, TimeoutError):
             pass
 
-        # Fallback to local file update
+        # Local fallback telemetry update
         try:
             with open(self.fallback_file, "w") as f:
                 json.dump(payload, f, indent=2)
@@ -66,7 +105,8 @@ class FlameNode:
             self.wh += 0.000150
             self.flame += 0.813475
 
-            # Generate cryptographic proof of pulse state
+            self.persist_state()
+
             telemetry_payload_str = f"flamechain:{self.count}:{self.wh}:{self.flame}:{time.time()}"
             sha256_hash = hashlib.sha256(telemetry_payload_str.encode('utf-8')).hexdigest()
 
@@ -81,7 +121,6 @@ class FlameNode:
             )
             sys.stdout.flush()
 
-            # Dispatch telemetry object
             telemetry_data = {
                 "node_id": self.node_id,
                 "pulse": self.count,
