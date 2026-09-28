@@ -10,6 +10,9 @@ TELEMETRY_ENDPOINT = "http://127.0.0.1:8080/api/telemetry"
 TELEMETRY_TIMEOUT_SEC = 2.0
 STATE_FILE = "node_state.json"
 
+WH_INCREMENT = 0.000150
+FLAME_INCREMENT = 0.813475
+
 IPFS_GATEWAY_FALLBACKS = [
     "https://ipfs.io/ipns/k51qzi5uqu5dl11flamechain_state.json",
     "https://gateway.pinata.cloud/ipfs/QmFlameChainGlobalStateFallback"
@@ -96,19 +99,30 @@ def run_pulse_loop():
     pulse_count = 0
     while True:
         pulse_count += 1
+        
+        node_state["watt_hours"] += WH_INCREMENT
+        node_state["flame_tokens"] += FLAME_INCREMENT
+
         pulse_data = f"{node_state['node_id']}:{pulse_count}:{time.time()}"
         sha_hash = hashlib.sha256(pulse_data.encode("utf-8")).hexdigest()[:16]
 
         ram = node_state.get("available_ram_mb", 3420)
-        wh = node_state.get("watt_hours", 0.0)
-        tokens = node_state.get("flame_tokens", 0.0)
+        wh = node_state["watt_hours"]
+        tokens = node_state["flame_tokens"]
 
         print(
-            f"[PULSE #{pulse_count}] SHA256: {sha_hash} | RAM: {ram}MB | Wh: {wh:.2f} | FLAME: {tokens:.2f} | Shard: HOTSWAP",
+            f"[PULSE #{pulse_count}] SHA256: {sha_hash} | RAM: {ram}MB | Wh: {wh:.6f} | FLAME: {tokens:.6f} | Shard: HOTSWAP",
             flush=True
         )
 
         submit_telemetry(node_state)
+
+        try:
+            with open(STATE_FILE, "w") as f:
+                json.dump(node_state, f, indent=2)
+        except OSError:
+            pass
+
         time.sleep(5)
 
 
