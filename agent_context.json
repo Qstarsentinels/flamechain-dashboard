@@ -1,1 +1,18 @@
-{"mesh_status": "ONLINE", "interconnected": true, "llm_agents": ["FlameGPT", "Sovereign"], "active_agents": ["Oracle", "Alchemist", "Sentinel"]}
+{
+  "mesh_status": "ONLINE",
+  "interconnected": true,
+  "llm_agents": [
+    "FlameGPT",
+    "Sovereign"
+  ],
+  "active_agents": [
+    "Oracle",
+    "Alchemist",
+    "Sentinel"
+  ],
+  "active_node_count": 1,
+  "total_mesh_ram_mb": 3420,
+  "total_wh_minted": 0.0639,
+  "total_flame_supply": 132.794694,
+  "last_mesh_sync": 1790568145.961918
+}
