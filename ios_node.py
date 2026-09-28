@@ -1,144 +1,41 @@
-#!/usr/bin/env python3
-"""
-FlameChain Edge Node Telemetry Module
-Target OS/Hardware: iOS / Termux / Mobile Mesh Node
-"""
+import logging
+import requests
 
-import hashlib
-import json
-import os
-import sys
-import time
-import urllib.request
-import urllib.error
+TELEMETRY_ENDPOINT = "http://127.0.0.1:8080/api/telemetry"
+TELEMETRY_TIMEOUT_SEC = 2.0
 
-try:
-    import psutil
-except ImportError:
-    psutil = None
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 
-class FlameNode:
-    def __init__(self):
-        self.count = 0
-        self.wh = 0.000000
-        self.flame = 0.000000
-        self.node_id = os.getenv("NODE_ID", "NODE-IOS-PAD-01")
-        self.tab_ip = os.getenv("TAB_IP", "127.0.0.1")
-        self.endpoint = f"http://{self.tab_ip}:8080/api/telemetry"
-        self.fallback_file = "telemetry_fallback.json"
-        self.state_file = "node_state.json"
-        
-        self.audit_initial_state()
-
-    def get_system_ram_mb(self) -> float:
-        if psutil:
-            return psutil.virtual_memory().used / (1024 * 1024)
-        return 512.00
-
-    def audit_initial_state(self):
-        """Read node_state.json and preserve maximum historical state."""
-        if os.path.exists(self.state_file):
-            try:
-                with open(self.state_file, "r") as f:
-                    state_data = json.load(f)
-                    existing_wh = float(state_data.get("wh", 0.0))
-                    existing_flame = float(state_data.get("flame", 0.0))
-                    existing_count = int(state_data.get("count", 0))
-
-                    self.wh = max(existing_wh, self.wh)
-                    self.flame = max(existing_flame, self.flame)
-                    self.count = max(existing_count, self.count)
-                    
-                    print(
-                        f"[STATE RESTORED] Loaded from {self.state_file} | "
-                        f"Pulse: {self.count} | Wh: {self.wh:.6f} | FLAME: {self.flame:.6f}"
-                    )
-            except Exception as e:
-                print(f"[WARN] Failed to audit initial state from {self.state_file}: {e}", file=sys.stderr)
-
-    def persist_state(self):
-        """Save current pulse state locally."""
-        state_payload = {
-            "node_id": self.node_id,
-            "count": self.count,
-            "wh": self.wh,
-            "flame": self.flame,
-            "updated_at": time.time()
-        }
-        try:
-            with open(self.state_file, "w") as f:
-                json.dump(state_payload, f, indent=2)
-        except OSError as e:
-            print(f"[WARN] Failed to write {self.state_file}: {e}", file=sys.stderr)
-
-    def submit_telemetry(self, payload: dict) -> bool:
-        """POST telemetry payload to central server, falling back to disk on failure."""
-        data = json.dumps(payload).encode('utf-8')
-        req = urllib.request.Request(
-            self.endpoint,
-            data=data,
-            headers={'Content-Type': 'application/json'},
-            method='POST'
+def submit_telemetry(payload: dict) -> bool:
+    """
+    HTTP POSTs the node telemetry payload (Watt-Hours, available RAM, shard status)
+    to the local/mesh API gateway with a strict 2-second timeout.
+    """
+    try:
+        response = requests.post(
+            TELEMETRY_ENDPOINT,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=TELEMETRY_TIMEOUT_SEC
         )
-
-        try:
-            with urllib.request.urlopen(req, timeout=2.0) as response:
-                if response.status == 200:
-                    return True
-        except (urllib.error.URLError, OSError, TimeoutError):
-            pass
-
-        # Local fallback telemetry update
-        try:
-            with open(self.fallback_file, "w") as f:
-                json.dump(payload, f, indent=2)
-        except OSError as e:
-            print(f"[WARN] Failed to write fallback telemetry: {e}", file=sys.stderr)
-            return False
-
+        response.raise_for_status()
+        logging.info(f"Telemetry successfully dispatched. Status: {response.status_code}")
+        return True
+    except requests.exceptions.Timeout:
+        logging.error(f"Telemetry dispatch timed out after {TELEMETRY_TIMEOUT_SEC} seconds.")
         return False
-
-    def run_pulse_loop(self, max_pulses=None):
-        while True:
-            self.count += 1
-            self.wh += 0.000150
-            self.flame += 0.813475
-
-            self.persist_state()
-
-            telemetry_payload_str = f"flamechain:{self.count}:{self.wh}:{self.flame}:{time.time()}"
-            sha256_hash = hashlib.sha256(telemetry_payload_str.encode('utf-8')).hexdigest()
-
-            ram_mb = self.get_system_ram_mb()
-
-            print(
-                f"[PULSE #{self.count}] SHA256: {sha256_hash} | "
-                f"RAM: {ram_mb:.2f}MB | "
-                f"Wh: {self.wh:.6f} (+0.000150) | "
-                f"FLAME: {self.flame:.6f} (+0.813475) | "
-                f"Shard: SHARD-0X-HOTSWAP-ACTIVE"
-            )
-            sys.stdout.flush()
-
-            telemetry_data = {
-                "node_id": self.node_id,
-                "pulse": self.count,
-                "hash": sha256_hash,
-                "ram_mb": round(ram_mb, 2),
-                "wh": round(self.wh, 6),
-                "flame": round(self.flame, 6),
-                "shard": "SHARD-0X-HOTSWAP-ACTIVE",
-                "timestamp": time.time()
-            }
-            self.submit_telemetry(telemetry_data)
-
-            if max_pulses and self.count >= max_pulses:
-                break
-
-            time.sleep(1.0)
+    except requests.exceptions.RequestException as err:
+        logging.error(f"Failed to submit telemetry: {err}")
+        return False
 
 
 if __name__ == "__main__":
-    node = FlameNode()
-    node.run_pulse_loop()
+    sample_payload = {
+        "node_id": "ipad-edge-alpha-01",
+        "watt_hours_remaining": 18.4,
+        "available_ram_mb": 3420,
+        "active_shards": ["shard_llama3_8b_layer_12_16"],
+        "mesh_role": "inference_worker"
+    }
+    submit_telemetry(sample_payload)
