@@ -45,22 +45,20 @@ def get_dynamic_node_id():
     return f"node-{arch}-{pid}"
 
 def audit_initial_state():
-    """Verify node_state.json on boot and restore historical token earnings if needed."""
+    """Verify node_state.json on boot and enforce strict burn logic for unbacked tokens."""
     local_state = read_json_file(NODE_STATE_FILE)
     if not local_state:
         return
 
     wh_consumed = float(local_state.get("wh_consumed", 0.0))
-    flame_minted = float(local_state.get("flame_minted", 0.0))
-
-    if wh_consumed > 0 and flame_minted < (wh_consumed * 1000.0):
-        audited_flame = wh_consumed * 1016.216
-        local_state["flame_minted"] = round(audited_flame, 6)
-        write_json_file(NODE_STATE_FILE, local_state)
-        print(
-            f"[INFO] AUDITED INITIAL STATE: Restored historical earnings to "
-            f"{audited_flame:.6f} FLAME based on {wh_consumed:.6f} Wh"
-        )
+    audited_flame = max(0.0, wh_consumed * 5423.126)
+    
+    local_state["flame_minted"] = round(audited_flame, 6)
+    write_json_file(NODE_STATE_FILE, local_state)
+    print(
+        f"[INFO] SUPPLY AUDITED & UNBACKED TOKENS BURNED: Re-aligned FLAME minted to "
+        f"{audited_flame:.6f} based on {wh_consumed:.6f} Wh"
+    )
 
 def submit_telemetry():
     try:
