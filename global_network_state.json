@@ -1,22 +1,21 @@
 {
-  "minted_flame_units": 10.5,
-  "accumulated_watt_hours": 0.0105,
-  "nodes": {
-    "flame-node-5a8e0d496568": {
-      "node_id": "flame-node-5a8e0d496568",
-      "platform": "Android-15-aarch64-64bit-ELF",
-      "arch": "aarch64",
-      "ram_mb": 3404,
-      "watt_hours": 45.0,
-      "status": "ACTIVE",
-      "last_seen": 1790561216.0785458
-    }
+  "network": "FlameChain-Mesh-1",
+  "updated_at": 1790563721.3241432,
+  "active_node_count": 1,
+  "totals": {
+    "total_ram_mb": 0.0,
+    "total_watt_hours": 0.0,
+    "total_flame_supply": 0.0
   },
-  "total_active_nodes": 3,
-  "last_telemetry_submit": 1700000000,
-  "energy_wh": 0.739659,
-  "gross_supply": 4010.827839,
-  "combined_mesh_memory_gb": 24.0,
-  "last_updated": 1790561216,
-  "last_pruned_timestamp": 1790560697
+  "nodes": {
+    "ipad-edge-alpha-01": {
+      "pulse": 0,
+      "hash": "",
+      "ram_mb": 0.0,
+      "wh": 0.0,
+      "flame": 0.0,
+      "shard": "SHARD-UNKNOWN",
+      "last_seen": 1790563721.3241432
+    }
+  }
 }
