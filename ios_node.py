@@ -11,7 +11,12 @@ GLOBAL_STATE_FILE = "global_network_state.json"
 WH_RATE_PER_SEC = 0.00003
 FLAME_RATE_PER_SEC = 0.1625
 
-LEGACY_STALE_NODES = {"test-node-01", "node_tab_localhost"}
+LEGACY_STALE_NODES = {
+    "test-node-01",
+    "node_tab_localhost",
+    "ios_ipad_pro_m2_mesh_01",
+    "ipad-validator-node"
+}
 
 def read_json_file(filepath):
     if not os.path.exists(filepath):
@@ -95,11 +100,11 @@ def submit_telemetry():
         if "nodes" not in global_state or not isinstance(global_state["nodes"], dict):
             global_state["nodes"] = {}
 
-        # Purge legacy/stale node entries
-        for legacy_id in LEGACY_STALE_NODES:
-            global_state["nodes"].pop(legacy_id, None)
+        # Purge explicitly requested legacy and stale node keys
+        for legacy_key in LEGACY_STALE_NODES:
+            global_state["nodes"].pop(legacy_key, None)
 
-        # Store current active node state
+        # Store current active dynamic node state
         global_state["nodes"][node_id] = standardized_node_state
 
         # Recalculate aggregate network totals
