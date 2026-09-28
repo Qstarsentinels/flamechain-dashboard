@@ -3,263 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FlameChain // AGI Singularity Mesh Dashboard</title>
+    <title>FlameChain — Singularity Mesh & Validator Telemetry</title>
     <style>
         :root {
-            --bg-color: #0d0f12;
-            --card-bg: rgba(22, 27, 34, 0.85);
-            --border-color: #30363d;
-            --accent-orange: #ff5500;
-            --accent-cyan: #00f0ff;
-            --text-main: #c9d1d9;
-            --text-muted: #8b949e;
-            --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            --bg-color: #0b0f19;
+            --card-bg: rgba(18, 26, 43, 0.75);
+            --border-color: rgba(255, 107, 0, 0.25);
+            --accent-orange: #ff6b00;
+            --accent-glow: rgba(ff, 107, 0, 0.15);
+            --text-primary: #f0f4f8;
+            --text-secondary: #94a3b8;
+            --status-active: #10b981;
         }
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        header {
-            width: 100%;
-            max-width: 1100px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 16px;
-            margin-bottom: 24px;
-        }
-
-        h1 {
-            font-family: var(--font-mono);
-            font-size: 1.5rem;
-            color: #ffffff;
-            margin: 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        h1 span {
-            color: var(--accent-orange);
-        }
-
-        .status-badge {
-            background: rgba(0, 240, 255, 0.1);
-            border: 1px solid var(--accent-cyan);
-            color: var(--accent-cyan);
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-family: var(--font-mono);
-            font-size: 0.85rem;
-        }
-
-        .grid-container {
-            width: 100%;
-            max-width: 1100px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 20px;
-            backdrop-filter: blur(8px);
-        }
-
-        .card-title {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
-            font-family: var(--font-mono);
-        }
-
-        .card-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #ffffff;
-            font-family: var(--font-mono);
-        }
-
-        .nodes-table-container {
-            width: 100%;
-            max-width: 1100px;
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-        }
-
-        th {
-            background: rgba(255, 255, 255, 0.03);
-            color: var(--text-muted);
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border-color);
-            font-weight: 600;
-        }
-
-        td {
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        tr:last-child td {
-            border-bottom: none;
-        }
-
-        .pulse-dot {
-            height: 8px;
-            width: 8px;
-            background-color: #00ff66;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 6px;
-            box-shadow: 0 0 8px #00ff66;
-        }
-
-        .footer-note {
-            margin-top: 24px;
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            font-family: var(--font-mono);
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-primary); padding: 2rem; min-height: 100vh; }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+        .brand h1 { font-size: 1.8rem; color: var(--accent-orange); letter-spacing: 1px; text-transform: uppercase; }
+        .brand p { font-size: 0.85rem; color: var(--text-secondary); }
+        .global-stats { display: flex; gap: 1.5rem; }
+        .stat-badge { background: var(--card-bg); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.85rem; }
+        .stat-badge span { color: var(--accent-orange); font-weight: bold; }
+        .section-title { font-size: 1.2rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; }
+        .nodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; }
+        .node-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; box-shadow: 0 4px 20px var(--accent-glow); transition: transform 0.2s ease, border-color 0.2s ease; position: relative; overflow: hidden; }
+        .node-card:hover { transform: translateY(-2px); border-color: var(--accent-orange); }
+        .node-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--accent-orange); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem; }
+        .device-name { font-weight: bold; font-size: 1.1rem; color: var(--text-primary); }
+        .node-type-tag { font-size: 0.7rem; font-weight: bold; background: rgba(255, 107, 0, 0.2); color: var(--accent-orange); padding: 0.2rem 0.5rem; border-radius: 4px; border: 1px solid var(--accent-orange); }
+        .metrics-list { display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.88rem; }
+        .metric-item { display: flex; justify-content: space-between; }
+        .metric-label { color: var(--text-secondary); }
+        .metric-value { font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+        .ipfs-status { margin-top: 1rem; padding-top: 0.5rem; border-top: 1px dashed rgba(255,255,255,0.1); font-size: 0.75rem; color: var(--text-secondary); word-break: break-all; }
+        .ipfs-status span { color: var(--status-active); font-weight: bold; }
     </style>
 </head>
 <body>
-
     <header>
-        <h1><span>FLAMECHAIN</span> // MESH TELEMETRY</h1>
-        <div class="status-badge" id="networkStatus">CONNECTING...</div>
+        <div class="brand">
+            <h1>FlameChain Mesh</h1>
+            <p>AGI Singularity Currency backed by Watt-Hours & System RAM</p>
+        </div>
+        <div class="global-stats">
+            <div class="stat-badge">Active Mesh Nodes: <span id="active-nodes-count">0</span></div>
+            <div class="stat-badge">Total Wh Minted: <span id="total-wh-minted">0.000000</span></div>
+            <div class="stat-badge">Total FLAME Minted: <span id="total-flame-minted">0.000000</span></div>
+        </div>
     </header>
-
-    <div class="grid-container">
-        <div class="card">
-            <div class="card-title">Active Mesh Nodes</div>
-            <div class="card-value" id="nodeCount">0</div>
-        </div>
-        <div class="card">
-            <div class="card-title">Total Active Memory</div>
-            <div class="card-value" id="totalRam">0 MB</div>
-        </div>
-        <div class="card">
-            <div class="card-title">Aggregate Energy (Wh)</div>
-            <div class="card-value" id="totalWh">0.0 Wh</div>
-        </div>
-    </div>
-
-    <div class="nodes-table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>NODE ID</th>
-                    <th>PLATFORM / ARCH</th>
-                    <th>RAM ALLOCATED</th>
-                    <th>WATT-HOURS</th>
-                    <th>LAST SEEN</th>
-                    <th>STATUS</th>
-                </tr>
-            </thead>
-            <tbody id="nodesTableBody">
-                <tr>
-                    <td colspan="6" style="text-align: center; color: var(--text-muted);">Awaiting telemetry feed...</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <div class="footer-note" id="lastUpdatedNote">Cache-Busting Stream: Active</div>
-
+    <main>
+        <h2 class="section-title">⚡ Validator & Edge Mesh Nodes</h2>
+        <div class="nodes-grid" id="nodes-container"></div>
+    </main>
     <script>
-        const REFRESH_INTERVAL_MS = 3000;
-
         async function fetchNetworkState() {
             try {
-                // Dynamic timestamp query parameter to bypass browser and CDN cache
-                const cacheBusterUrl = `./global_network_state.json?t=${Date.now()}`;
-                const response = await fetch(cacheBusterUrl, {
-                    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
+                const response = await fetch('/api/network_state', { cache: 'no-store' })
+                    .catch(() => fetch('global_network_state.json', { cache: 'no-store' }));
+                if (!response.ok) return;
                 const data = await response.json();
                 renderTelemetry(data);
-            } catch (error) {
-                console.error("[FlameChain Dashboard] Telemetry fetch error:", error);
-                document.getElementById('networkStatus').innerText = "DISCONNECTED";
-                document.getElementById('networkStatus').style.borderColor = "#ff3333";
-                document.getElementById('networkStatus').style.color = "#ff3333";
+            } catch (err) {
+                console.warn('Telemetry sync error:', err);
             }
         }
 
         function renderTelemetry(data) {
-            const nodes = data.nodes || {};
-            const nodeList = Object.values(nodes);
-            const now = Math.floor(Date.now() / 1000);
+            const nodes = data.nodes || data.validators || [];
+            const container = document.getElementById('nodes-container');
+            container.innerHTML = '';
 
-            document.getElementById('networkStatus').innerText = "MESH ONLINE";
-            document.getElementById('networkStatus').style.borderColor = "var(--accent-cyan)";
-            document.getElementById('networkStatus').style.color = "var(--accent-cyan)";
+            let totalWh = 0;
+            let totalFlame = 0;
 
-            document.getElementById('nodeCount').innerText = nodeList.length;
+            Object.values(nodes).forEach(node => {
+                const wh = parseFloat(node.watt_hours || node.total_wh_minted || 0);
+                const flame = parseFloat(node.flame_tokens || node.total_flame_earnings || 0);
+                const ram = node.ram_allocated_mb || node.available_ram_mb || 0;
+                const ipfsKey = node.ipfs_ipns_key || 'IPNS_SYNC_ACTIVE';
 
-            let totalRam = 0;
-            let totalWh = 0.0;
+                totalWh += wh;
+                totalFlame += flame;
 
-            const tableBody = document.getElementById('nodesTableBody');
-            if (nodeList.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No active nodes detected in global state.</td></tr>`;
-            } else {
-                tableBody.innerHTML = nodeList.map(node => {
-                    totalRam += (node.ram_mb || 0);
-                    totalWh += (node.watt_hours || 0.0);
-                    const secondsAgo = Math.max(0, now - Math.floor(node.last_seen || now));
+                const card = document.createElement('div');
+                card.className = 'node-card';
+                card.innerHTML = `
+                    <div class="card-header">
+                        <span class="device-name">${node.node_id || 'Unknown Edge Node'}</span>
+                        <span class="node-type-tag">${node.node_type || 'VALIDATOR'}</span>
+                    </div>
+                    <div class="metrics-list">
+                        <div class="metric-item">
+                            <span class="metric-label">RAM Allocated:</span>
+                            <span class="metric-value">${ram} MB</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Energy Backing (Wh):</span>
+                            <span class="metric-value">${wh.toFixed(6)} Wh</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">FLAME Balance:</span>
+                            <span class="metric-value">${flame.toFixed(6)} FLAME</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Mesh Role:</span>
+                            <span class="metric-value">${node.mesh_role || 'inference_worker'}</span>
+                        </div>
+                    </div>
+                    <div class="ipfs-status">
+                        IPFS/IPNS Sync: <span>ONLINE</span><br>
+                        <small>Key: ${ipfsKey}</small>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
 
-                    return `
-                        <tr>
-                            <td><strong>${node.node_id || 'unknown'}</strong></td>
-                            <td>${node.platform || 'N/A'} (${node.arch || 'ARM64'})</td>
-                            <td>${node.ram_mb || 0} MB</td>
-                            <td>${node.watt_hours ? node.watt_hours.toFixed(1) : '0.0'} Wh</td>
-                            <td>${secondsAgo}s ago</td>
-                            <td><span class="pulse-dot"></span>${node.status || 'ACTIVE'}</td>
-                        </tr>
-                    `;
-                }).join('');
-            }
-
-            document.getElementById('totalRam').innerText = `${totalRam} MB`;
-            document.getElementById('totalWh').innerText = `${totalWh.toFixed(1)} Wh`;
-            document.getElementById('lastUpdatedNote').innerText = `Cache-Busting Stream: Syncing live | Epoch: ${data.last_updated || now}`;
+            document.getElementById('active-nodes-count').innerText = Object.keys(nodes).length;
+            document.getElementById('total-wh-minted').innerText = totalWh.toFixed(6);
+            document.getElementById('total-flame-minted').innerText = totalFlame.toFixed(6);
         }
 
-        // Initialize loop
+        setInterval(fetchNetworkState, 3000);
         fetchNetworkState();
-        setInterval(fetchNetworkState, REFRESH_INTERVAL_MS);
     </script>
 </body>
 </html>

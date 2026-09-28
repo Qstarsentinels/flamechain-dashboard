@@ -23,21 +23,32 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 class FlameChainNode:
     def __init__(self):
         self.node_id = "ipad-edge-alpha-01"
+        self.node_type = "VALIDATOR"
         self.watt_hours = 0.0
         self.flame_tokens = 0.0
         self.available_ram_mb = 3420
+        self.ram_allocated_mb = 3420
         self.active_shards = ["shard_llama3_8b_layer_12_16"]
         self.mesh_role = "inference_worker"
+        self.ipfs_ipns_key = "k51qzi5uqu5dl11flamechain_validator_key_ipad_alpha"
 
-    def to_dict(self) -> dict:
+    def get_telemetry_payload(self) -> dict:
         return {
             "node_id": self.node_id,
+            "node_type": self.node_type,
             "watt_hours": self.watt_hours,
             "flame_tokens": self.flame_tokens,
+            "total_wh_minted": self.watt_hours,
+            "total_flame_earnings": self.flame_tokens,
             "available_ram_mb": self.available_ram_mb,
+            "ram_allocated_mb": self.ram_allocated_mb,
             "active_shards": self.active_shards,
-            "mesh_role": self.mesh_role
+            "mesh_role": self.mesh_role,
+            "ipfs_ipns_key": self.ipfs_ipns_key
         }
+
+    def to_dict(self) -> dict:
+        return self.get_telemetry_payload()
 
     def fetch_ipfs_state(self) -> dict:
         for gateway_url in IPFS_GATEWAY_FALLBACKS:
@@ -67,8 +78,8 @@ class FlameChainNode:
             try:
                 with open(STATE_FILE, "r") as f:
                     local_state = json.load(f)
-                    highest_wh = max(highest_wh, float(local_state.get("watt_hours", 0.0)))
-                    highest_tokens = max(highest_tokens, float(local_state.get("flame_tokens", 0.0)))
+                    highest_wh = max(highest_wh, float(local_state.get("watt_hours", local_state.get("total_wh_minted", 0.0))))
+                    highest_tokens = max(highest_tokens, float(local_state.get("flame_tokens", local_state.get("total_flame_earnings", 0.0))))
                     logging.info(f"Local state evaluated: Wh={highest_wh:.6f}, Tokens={highest_tokens:.6f}")
             except (json.JSONDecodeError, OSError, ValueError) as err:
                 logging.warning(f"Could not read local {STATE_FILE}: {err}")
@@ -76,8 +87,8 @@ class FlameChainNode:
         ipfs_state = self.fetch_ipfs_state()
         if ipfs_state:
             try:
-                remote_wh = float(ipfs_state.get("watt_hours", 0.0))
-                remote_tokens = float(ipfs_state.get("flame_tokens", 0.0))
+                remote_wh = float(ipfs_state.get("watt_hours", ipfs_state.get("total_wh_minted", 0.0)))
+                remote_tokens = float(ipfs_state.get("flame_tokens", ipfs_state.get("total_flame_earnings", 0.0)))
                 highest_wh = max(highest_wh, remote_wh)
                 highest_tokens = max(highest_tokens, remote_tokens)
                 logging.info(f"IPFS state integrated: Wh={highest_wh:.6f}, Tokens={highest_tokens:.6f}")
@@ -89,16 +100,16 @@ class FlameChainNode:
 
         try:
             with open(STATE_FILE, "w") as f:
-                json.dump(self.to_dict(), f, indent=2)
+                json.dump(self.get_telemetry_payload(), f, indent=2)
             logging.info("Initial audit complete. Persisted synchronized state baseline locally.")
         except OSError as err:
             logging.error(f"Failed to write state file during audit: {err}")
 
-        return self.to_dict()
+        return self.get_telemetry_payload()
 
     def submit_telemetry(self) -> bool:
         try:
-            data = json.dumps(self.to_dict()).encode("utf-8")
+            data = json.dumps(self.get_telemetry_payload()).encode("utf-8")
             req = urllib.request.Request(
                 TELEMETRY_ENDPOINT,
                 data=data,
@@ -122,7 +133,7 @@ class FlameChainNode:
             sha_hash = hashlib.sha256(pulse_data.encode("utf-8")).hexdigest()[:16]
 
             print(
-                f"[PULSE #{pulse_count}] SHA256: {sha_hash} | RAM: {self.available_ram_mb}MB | "
+                f"[PULSE #{pulse_count}] SHA256: {sha_hash} | RAM: {self.ram_allocated_mb}MB | "
                 f"Wh: {self.watt_hours:.6f} | FLAME: {self.flame_tokens:.6f} | Shard: HOTSWAP",
                 flush=True
             )
@@ -131,7 +142,7 @@ class FlameChainNode:
 
             try:
                 with open(STATE_FILE, "w") as f:
-                    json.dump(self.to_dict(), f, indent=2)
+                    json.dump(self.get_telemetry_payload(), f, indent=2)
             except OSError:
                 pass
 
