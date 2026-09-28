@@ -9,6 +9,8 @@ import urllib.error
 TELEMETRY_ENDPOINT = "http://127.0.0.1:8080/api/telemetry"
 TELEMETRY_TIMEOUT_SEC = 2.0
 STATE_FILE = "node_state.json"
+GLOBAL_STATE_FILE = "global_network_state.json"
+AGENT_CONTEXT_FILE = "agent_context.json"
 
 IPFS_GATEWAY_FALLBACKS = [
     "https://ipfs.io/ipns/k51qzi5uqu5dl11flamechain_state.json",
@@ -26,7 +28,7 @@ class FlameChainNode:
         self.node_type = "VALIDATOR"
         self.watt_hours = 0.0
         self.flame_tokens = 0.0
-        self.available_ram_mb = 3420
+        self.ram_mb = 3420
         self.ram_allocated_mb = 3420
         self.active_shards = ["shard_llama3_8b_layer_12_16"]
         self.mesh_role = "inference_worker"
@@ -40,7 +42,7 @@ class FlameChainNode:
             "flame_tokens": self.flame_tokens,
             "total_wh_minted": self.watt_hours,
             "total_flame_earnings": self.flame_tokens,
-            "available_ram_mb": self.available_ram_mb,
+            "available_ram_mb": self.ram_mb,
             "ram_allocated_mb": self.ram_allocated_mb,
             "active_shards": self.active_shards,
             "mesh_role": self.mesh_role,
@@ -107,6 +109,66 @@ class FlameChainNode:
 
         return self.get_telemetry_payload()
 
+    def sync_global_mesh_state(self):
+        global_state = {"nodes": {}, "last_updated": time.time()}
+        
+        if os.path.exists(GLOBAL_STATE_FILE):
+            try:
+                with open(GLOBAL_STATE_FILE, "r") as f:
+                    global_state = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        if "nodes" not in global_state or not isinstance(global_state["nodes"], dict):
+            global_state["nodes"] = {}
+
+        global_state["nodes"][self.node_id] = self.get_telemetry_payload()
+        global_state["last_updated"] = time.time()
+
+        try:
+            with open(GLOBAL_STATE_FILE, "w") as f:
+                json.dump(global_state, f, indent=2)
+        except OSError as err:
+            logging.error(f"Failed to write {GLOBAL_STATE_FILE}: {err}")
+
+        nodes = global_state["nodes"]
+        active_node_count = len(nodes)
+        total_mesh_ram_mb = sum(
+            n.get("ram_allocated_mb", n.get("available_ram_mb", 0)) for n in nodes.values()
+        )
+        total_wh_minted = sum(
+            n.get("watt_hours", n.get("total_wh_minted", 0.0)) for n in nodes.values()
+        )
+        total_flame_supply = sum(
+            n.get("flame_tokens", n.get("total_flame_earnings", 0.0)) for n in nodes.values()
+        )
+
+        agent_context = {}
+        if os.path.exists(AGENT_CONTEXT_FILE):
+            try:
+                with open(AGENT_CONTEXT_FILE, "r") as f:
+                    agent_context = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        agent_context.update({
+            "active_node_count": active_node_count,
+            "total_mesh_ram_mb": total_mesh_ram_mb,
+            "total_wh_minted": round(total_wh_minted, 6),
+            "total_flame_supply": round(total_flame_supply, 6),
+            "last_mesh_sync": time.time()
+        })
+
+        try:
+            with open(AGENT_CONTEXT_FILE, "w") as f:
+                json.dump(agent_context, f, indent=2)
+            logging.info(
+                f"[STATE SYNC] Pulse checkpoint: {active_node_count} nodes | "
+                f"RAM: {total_mesh_ram_mb}MB | Wh: {total_wh_minted:.6f} | FLAME: {total_flame_supply:.6f}"
+            )
+        except OSError as err:
+            logging.error(f"Failed to write {AGENT_CONTEXT_FILE}: {err}")
+
     def submit_telemetry(self) -> bool:
         try:
             data = json.dumps(self.get_telemetry_payload()).encode("utf-8")
@@ -123,11 +185,15 @@ class FlameChainNode:
 
     def run_pulse_loop(self):
         pulse_count = 0
+        wh_increment = 0.000150
+
         while True:
             pulse_count += 1
 
-            self.watt_hours += 0.000150
-            self.flame_tokens += 0.813475
+            flame_increment = wh_increment * (self.ram_mb / 1024.0) * 100.0
+
+            self.watt_hours += wh_increment
+            self.flame_tokens += flame_increment
 
             pulse_data = f"{self.node_id}:{pulse_count}:{time.time()}"
             sha_hash = hashlib.sha256(pulse_data.encode("utf-8")).hexdigest()[:16]
@@ -145,6 +211,9 @@ class FlameChainNode:
                     json.dump(self.get_telemetry_payload(), f, indent=2)
             except OSError:
                 pass
+
+            if pulse_count % 10 == 0:
+                self.sync_global_mesh_state()
 
             time.sleep(5)
 

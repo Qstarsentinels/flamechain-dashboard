@@ -10,7 +10,7 @@
             --card-bg: rgba(18, 26, 43, 0.75);
             --border-color: rgba(255, 107, 0, 0.25);
             --accent-orange: #ff6b00;
-            --accent-glow: rgba(ff, 107, 0, 0.15);
+            --accent-glow: rgba(255, 107, 0, 0.15);
             --text-primary: #f0f4f8;
             --text-secondary: #94a3b8;
             --status-active: #10b981;
@@ -18,12 +18,12 @@
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; }
         body { background-color: var(--bg-color); color: var(--text-primary); padding: 2rem; min-height: 100vh; }
-        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+        header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1.5rem; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
         .brand h1 { font-size: 1.8rem; color: var(--accent-orange); letter-spacing: 1px; text-transform: uppercase; }
         .brand p { font-size: 0.85rem; color: var(--text-secondary); }
-        .global-stats { display: flex; gap: 1.5rem; }
+        .global-stats { display: flex; gap: 1rem; flex-wrap: wrap; }
         .stat-badge { background: var(--card-bg); border: 1px solid var(--border-color); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.85rem; }
-        .stat-badge span { color: var(--accent-orange); font-weight: bold; }
+        .stat-badge span { color: var(--accent-orange); font-weight: bold; font-family: 'JetBrains Mono', monospace; }
         .section-title { font-size: 1.2rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; }
         .nodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; }
         .node-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; box-shadow: 0 4px 20px var(--accent-glow); transition: transform 0.2s ease, border-color 0.2s ease; position: relative; overflow: hidden; }
@@ -47,44 +47,51 @@
             <p>AGI Singularity Currency backed by Watt-Hours & System RAM</p>
         </div>
         <div class="global-stats">
-            <div class="stat-badge">Active Mesh Nodes: <span id="active-nodes-count">0</span></div>
-            <div class="stat-badge">Total Wh Minted: <span id="total-wh-minted">0.000000</span></div>
-            <div class="stat-badge">Total FLAME Minted: <span id="total-flame-minted">0.000000</span></div>
+            <div class="stat-badge">Active Nodes: <span id="active-nodes-count">0</span></div>
+            <div class="stat-badge">Total Mesh RAM: <span id="total-mesh-ram">0 MB</span></div>
+            <div class="stat-badge">Total Wh Minted: <span id="total-wh-minted">0.000000 Wh</span></div>
+            <div class="stat-badge">Total FLAME Supply: <span id="total-flame-minted">0.000000 FLAME</span></div>
         </div>
     </header>
     <main>
-        <h2 class="section-title">⚡ Validator & Edge Mesh Nodes</h2>
+        <h2 class="section-title">⚡ Validator & Mesh Nodes</h2>
         <div class="nodes-grid" id="nodes-container"></div>
     </main>
     <script>
-        async function fetchNetworkState() {
+        async function fetchNetworkTelemetry() {
             try {
-                const response = await fetch('/api/network_state', { cache: 'no-store' })
-                    .catch(() => fetch('global_network_state.json', { cache: 'no-store' }));
-                if (!response.ok) return;
-                const data = await response.json();
-                renderTelemetry(data);
+                const [stateRes, contextRes] = await Promise.all([
+                    fetch('global_network_state.json?t=' + Date.now(), { cache: 'no-store' }),
+                    fetch('agent_context.json?t=' + Date.now(), { cache: 'no-store' })
+                ]);
+                let networkState = stateRes.ok ? await stateRes.json() : { nodes: {} };
+                let agentContext = contextRes.ok ? await contextRes.json() : {};
+                renderDashboard(networkState, agentContext);
             } catch (err) {
-                console.warn('Telemetry sync error:', err);
+                console.warn('Telemetry auto-fetch warning:', err);
             }
         }
 
-        function renderTelemetry(data) {
-            const nodes = data.nodes || data.validators || [];
+        function renderDashboard(networkState, agentContext) {
+            const nodes = networkState.nodes || {};
             const container = document.getElementById('nodes-container');
             container.innerHTML = '';
 
-            let totalWh = 0;
-            let totalFlame = 0;
+            let computedWh = 0;
+            let computedFlame = 0;
+            let computedRam = 0;
 
-            Object.values(nodes).forEach(node => {
+            const nodeList = Object.values(nodes);
+
+            nodeList.forEach(node => {
                 const wh = parseFloat(node.watt_hours || node.total_wh_minted || 0);
                 const flame = parseFloat(node.flame_tokens || node.total_flame_earnings || 0);
-                const ram = node.ram_allocated_mb || node.available_ram_mb || 0;
+                const ram = parseInt(node.ram_allocated_mb || node.available_ram_mb || 0, 10);
                 const ipfsKey = node.ipfs_ipns_key || 'IPNS_SYNC_ACTIVE';
 
-                totalWh += wh;
-                totalFlame += flame;
+                computedWh += wh;
+                computedFlame += flame;
+                computedRam += ram;
 
                 const card = document.createElement('div');
                 card.className = 'node-card';
@@ -119,13 +126,19 @@
                 container.appendChild(card);
             });
 
-            document.getElementById('active-nodes-count').innerText = Object.keys(nodes).length;
-            document.getElementById('total-wh-minted').innerText = totalWh.toFixed(6);
-            document.getElementById('total-flame-minted').innerText = totalFlame.toFixed(6);
+            const activeCount = agentContext.active_node_count || nodeList.length;
+            const displayWh = computedWh || agentContext.total_wh_minted || 0;
+            const displayFlame = computedFlame || agentContext.total_flame_supply || 0;
+            const displayRam = computedRam || agentContext.total_mesh_ram_mb || 0;
+
+            document.getElementById('active-nodes-count').innerText = activeCount;
+            document.getElementById('total-mesh-ram').innerText = displayRam + ' MB';
+            document.getElementById('total-wh-minted').innerText = parseFloat(displayWh).toFixed(6) + ' Wh';
+            document.getElementById('total-flame-minted').innerText = parseFloat(displayFlame).toFixed(6) + ' FLAME';
         }
 
-        setInterval(fetchNetworkState, 3000);
-        fetchNetworkState();
+        setInterval(fetchNetworkTelemetry, 5000);
+        fetchNetworkTelemetry();
     </script>
 </body>
 </html>
