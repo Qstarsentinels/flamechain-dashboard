@@ -7,10 +7,10 @@
       "architecture": "aarch64",
       "os": "Android",
       "system_ram_mb": 4096,
-      "pulse_count": 527,
-      "wh_consumed": 0.067691,
-      "flame_minted": 366.654584,
-      "timestamp": 1790558564.0731564,
+      "pulse_count": 1197,
+      "wh_consumed": 0.103184,
+      "flame_minted": 559.31781,
+      "timestamp": 1790559328.7691014,
       "status": "ACTIVE_PROOF_OF_WATT"
     },
     "node-aarch64-20756": {
@@ -18,11 +18,11 @@
       "architecture": "aarch64",
       "os": "Android",
       "system_ram_mb": 4096,
-      "pulse_count": 528,
-      "wh_consumed": 0.067705,
-      "flame_minted": 366.732069,
-      "last_seen": 1790558564.5522485,
-      "timestamp": 1790558564.5522485,
+      "pulse_count": 1198,
+      "wh_consumed": 0.103197,
+      "flame_minted": 559.38651,
+      "last_seen": 1790559329.194045,
+      "timestamp": 1790559329.194045,
       "status": "ACTIVE_PROOF_OF_WATT"
     },
     "node-aarch64-23868": {
@@ -30,11 +30,11 @@
       "architecture": "aarch64",
       "os": "Android",
       "system_ram_mb": 4096,
-      "pulse_count": 529,
-      "wh_consumed": 0.067721,
-      "flame_minted": 366.819846,
-      "last_seen": 1790558565.095182,
-      "timestamp": 1790558565.095182,
+      "pulse_count": 1199,
+      "wh_consumed": 0.103214,
+      "flame_minted": 559.481124,
+      "last_seen": 1790559329.7786918,
+      "timestamp": 1790559329.7786918,
       "status": "ACTIVE_PROOF_OF_WATT"
     },
     "node-aarch64-24059": {
@@ -42,18 +42,30 @@
       "architecture": "aarch64",
       "os": "Android",
       "system_ram_mb": 4096,
-      "pulse_count": 526,
-      "wh_consumed": 0.067541,
-      "flame_minted": 365.842084,
-      "last_seen": 1790558562.6622958,
-      "timestamp": 1790558562.6622958,
+      "pulse_count": 1196,
+      "wh_consumed": 0.103034,
+      "flame_minted": 558.50531,
+      "last_seen": 1790559327.3735092,
+      "timestamp": 1790559327.3735092,
+      "status": "ACTIVE_PROOF_OF_WATT"
+    },
+    "node-aarch64-24900": {
+      "node_id": "node-aarch64-24900",
+      "architecture": "aarch64",
+      "os": "Android",
+      "system_ram_mb": 4096,
+      "pulse_count": 1200,
+      "wh_consumed": 0.103226,
+      "flame_minted": 559.543811,
+      "last_seen": 1790559330.1669867,
+      "timestamp": 1790559330.1669867,
       "status": "ACTIVE_PROOF_OF_WATT"
     }
   },
   "total_active_nodes": 3,
   "last_telemetry_submit": 1700000000,
-  "energy_wh": 0.270658,
-  "gross_supply": 1466.048583,
-  "combined_mesh_memory_gb": 16.0,
-  "last_updated": 1790558565.095182
+  "energy_wh": 0.515855,
+  "gross_supply": 2796.234565,
+  "combined_mesh_memory_gb": 20.0,
+  "last_updated": 1790559330.1669867
 }

@@ -1,16 +1,38 @@
 {
-  "node_id": "flamechain-termux-galaxy-tab",
-  "status": "ACTIVE_PROOF_OF_WATT",
-  "watt_hours_reserve": 45.0,
-  "total_network_ram": "128 GB",
-  "flameGPT_memory_allocation": "6 GB",
-  "active_mesh_memory_gb": 4.0,
-  "active_mesh_nodes": [
-    "node-aarch64-active",
-    "node-arm64-validator"
-  ],
-  "shard_allocation": {
-    "shard_01": "HOTSWAP_ACTIVE",
-    "shard_02": "HOTSWAP_ACTIVE"
+  "network": "FlameChain-Mainnet-Singularity",
+  "node_architecture": "Android-Termux-ARM64",
+  "device_profile": "Galaxy Tab S-Series Node",
+  "telemetry": {
+    "active_mesh_ram_mb": 12288,
+    "watt_hours": 45.0,
+    "audited_supply": 1000000.0000,
+    "last_audit_timestamp": 1711800000
+  },
+  "agent_registry": {
+    "FlameGPT": {
+      "status": "ONLINE",
+      "allocated_ram_mb": 3072,
+      "role": "Mesh Dialogue & Global Intent Translation"
+    },
+    "Sovereign LLM": {
+      "status": "ONLINE",
+      "allocated_ram_mb": 4096,
+      "role": "Local Edge Shard Reasoning Core"
+    },
+    "Alchemist": {
+      "status": "ONLINE",
+      "allocated_ram_mb": 1536,
+      "role": "Watt-Hour & System Memory Backed Tokenization"
+    },
+    "Oracle": {
+      "status": "ONLINE",
+      "allocated_ram_mb": 1024,
+      "role": "Cross-Node Hardware Telemetry Ingestion"
+    },
+    "Sentinel": {
+      "status": "ONLINE",
+      "allocated_ram_mb": 1024,
+      "role": "Proof-of-Capacity & Zero-Knowledge Verification"
+    }
   }
 }
