@@ -1,6 +1,6 @@
 {
   "network": "FlameChain-Mesh-1",
-  "updated_at": 1790583177.0367246,
+  "updated_at": 1790583196.741919,
   "active_node_count": 1,
   "totals": {
     "total_ram_mb": 0.0,
@@ -15,7 +15,7 @@
       "wh": 0.0,
       "flame": 0.0,
       "shard": "SHARD-UNKNOWN",
-      "last_seen": 1790583177.0367246
+      "last_seen": 1790583196.741919
     }
   }
 }
