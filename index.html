@@ -164,6 +164,7 @@
             <thead>
                 <tr>
                     <th>Node Identifier</th>
+                    <th>Architecture</th>
                     <th>Status</th>
                     <th>RAM Allocated</th>
                     <th>Energy Consumed</th>
@@ -172,7 +173,7 @@
             </thead>
             <tbody id="nodes-table-body">
                 <tr>
-                    <td colspan="5" style="text-align: center; color: var(--text-secondary);">Querying state network...</td>
+                    <td colspan="6" style="text-align: center; color: var(--text-secondary);">Querying state network...</td>
                 </tr>
             </tbody>
         </table>
@@ -190,33 +191,15 @@
             return 0.0;
         }
 
-        function extractRamGb(node) {
-            if (node.system_ram_mb !== undefined) return parseNum(node.system_ram_mb) / 1024.0;
-            if (node.ram_mb !== undefined) return parseNum(node.ram_mb) / 1024.0;
-            if (node.system_ram_gb !== undefined) return parseNum(node.system_ram_gb);
-            if (node.ram_gb !== undefined) return parseNum(node.ram_gb);
+        function extractRamMb(node) {
+            if (node.system_ram_mb !== undefined) return parseNum(node.system_ram_mb);
+            if (node.ram_mb !== undefined) return parseNum(node.ram_mb);
+            if (node.system_ram_gb !== undefined) return parseNum(node.system_ram_gb) * 1024.0;
+            if (node.ram_gb !== undefined) return parseNum(node.ram_gb) * 1024.0;
             if (node.ram !== undefined) {
                 const parsed = parseNum(node.ram);
-                return typeof node.ram === 'string' && node.ram.toLowerCase().includes('mb') ? parsed / 1024.0 : parsed;
+                return typeof node.ram === 'string' && node.ram.toLowerCase().includes('gb') ? parsed * 1024.0 : parsed;
             }
-            return 0.0;
-        }
-
-        function extractEnergyWh(node) {
-            if (node.wh_consumed !== undefined) return parseNum(node.wh_consumed);
-            if (node.wh !== undefined) return parseNum(node.wh);
-            if (node.watt_hours !== undefined) return parseNum(node.watt_hours);
-            if (node.energy_wh !== undefined) return parseNum(node.energy_wh);
-            if (node.watt_hours_reserve !== undefined) return parseNum(node.watt_hours_reserve);
-            return 0.0;
-        }
-
-        function extractMintedFlame(node) {
-            if (node.flame_minted !== undefined) return parseNum(node.flame_minted);
-            if (node.minted_tokens !== undefined) return parseNum(node.minted_tokens);
-            if (node.flame !== undefined) return parseNum(node.flame);
-            if (node.balance !== undefined) return parseNum(node.balance);
-            if (node.stake !== undefined) return parseNum(node.stake);
             return 0.0;
         }
 
@@ -251,7 +234,6 @@
 
             let nodesMap = {};
 
-            // Extract nodes map handling root objects and legacy lists
             if (data.nodes && typeof data.nodes === 'object' && !Array.isArray(data.nodes)) {
                 nodesMap = data.nodes;
             } else if (data.validators && typeof data.validators === 'object' && !Array.isArray(data.validators)) {
@@ -268,31 +250,35 @@
 
             let calculatedSupply = 0.0;
             let calculatedEnergyWh = 0.0;
-            let calculatedRamGb = 0.0;
+            let calculatedRamMb = 0.0;
 
             const tbody = document.getElementById('nodes-table-body');
             tbody.innerHTML = '';
 
             if (nodeEntries.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No active mesh node telemetry discovered.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary);">No active mesh node telemetry discovered.</td></tr>';
             } else {
                 nodeEntries.forEach(([key, nodeObj]) => {
                     const nodeId = nodeObj.node_id || nodeObj.id || key;
+                    const arch = nodeObj.architecture || nodeObj.arch || 'arm64';
                     const nodeStatus = nodeObj.status || nodeObj.state || 'ACTIVE';
 
-                    const nodeMinted = extractMintedFlame(nodeObj);
-                    const nodeWh = extractEnergyWh(nodeObj);
-                    const nodeRamGb = extractRamGb(nodeObj);
+                    const nodeMinted = parseNum(nodeObj.flame_minted || nodeObj.minted_tokens || nodeObj.balance);
+                    const nodeWh = parseNum(nodeObj.wh_consumed || nodeObj.wh || nodeObj.watt_hours);
+                    const nodeRamMb = extractRamMb(nodeObj);
 
                     calculatedSupply += nodeMinted;
                     calculatedEnergyWh += nodeWh;
-                    calculatedRamGb += nodeRamGb;
+                    calculatedRamMb += nodeRamMb;
+
+                    const nodeRamGb = nodeRamMb / 1024.0;
 
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td style="font-family: monospace; font-weight: bold; color: var(--text-primary);">${nodeId}</td>
+                        <td style="font-family: monospace; color: var(--accent-cyan);">${arch}</td>
                         <td><span style="color: ${nodeStatus.includes('ACTIVE') ? 'var(--success-green)' : 'var(--text-secondary)'}; font-weight: bold;">${nodeStatus}</span></td>
-                        <td>${nodeRamGb.toFixed(2)} GB</td>
+                        <td>${nodeRamGb.toFixed(2)} GB (${nodeRamMb.toFixed(0)} MB)</td>
                         <td>${nodeWh.toFixed(6)} Wh</td>
                         <td>${nodeMinted.toFixed(6)} FLAME</td>
                     `;
@@ -300,19 +286,18 @@
                 });
             }
 
-            // Fallback to top-level json properties if nodes map is absent
             const topLevelSupply = parseNum(data.gross_supply || data.total_supply);
             const topLevelWh = parseNum(data.energy_wh || data.total_watt_hours);
-            const topLevelRam = parseNum(data.combined_mesh_memory_gb || data.total_network_ram_gb);
+            const topLevelRamGb = parseNum(data.combined_mesh_memory_gb || data.total_network_ram_gb);
 
             const finalSupply = calculatedSupply > 0 ? calculatedSupply : topLevelSupply;
             const finalWh = calculatedEnergyWh > 0 ? calculatedEnergyWh : topLevelWh;
-            const finalRam = calculatedRamGb > 0 ? calculatedRamGb : topLevelRam;
+            const finalRamGb = calculatedRamMb > 0 ? (calculatedRamMb / 1024.0) : topLevelRamGb;
 
             document.getElementById('gross-supply').innerText = finalSupply.toFixed(4);
             document.getElementById('energy-wh').innerText = finalWh.toFixed(6);
-            document.getElementById('mesh-memory').innerText = finalRam.toFixed(2);
-            document.getElementById('data-source').innerText = `Data Source: ${source} | Stream count: ${nodeEntries.length}`;
+            document.getElementById('mesh-memory').innerText = finalRamGb.toFixed(2);
+            document.getElementById('data-source').innerText = `Data Source: ${source} | Active Validators: ${nodeEntries.length}`;
         }
 
         function updateStatus(online, message) {

@@ -4,9 +4,13 @@
   "watt_hours_reserve": 45.0,
   "total_network_ram": "128 GB",
   "flameGPT_memory_allocation": "6 GB",
+  "active_mesh_memory_gb": 4.0,
   "active_mesh_nodes": [
-    "192.168.1.101:8080",
-    "192.168.1.102:8080",
-    "192.168.1.105:8080"
-  ]
+    "node-aarch64-active",
+    "node-arm64-validator"
+  ],
+  "shard_allocation": {
+    "shard_01": "HOTSWAP_ACTIVE",
+    "shard_02": "HOTSWAP_ACTIVE"
+  }
 }

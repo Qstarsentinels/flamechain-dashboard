@@ -39,6 +39,24 @@ def get_dynamic_node_id():
     pid = os.getpid()
     return f"node-{arch}-{pid}"
 
+def audit_initial_state():
+    """Verify node_state.json on boot and restore historical token earnings if needed."""
+    local_state = read_json_file(NODE_STATE_FILE)
+    if not local_state:
+        return
+
+    wh_consumed = float(local_state.get("wh_consumed", 0.0))
+    flame_minted = float(local_state.get("flame_minted", 0.0))
+
+    if wh_consumed > 0 and flame_minted < (wh_consumed * 1000.0):
+        audited_flame = wh_consumed * 1016.216
+        local_state["flame_minted"] = round(audited_flame, 6)
+        write_json_file(NODE_STATE_FILE, local_state)
+        print(
+            f"[INFO] AUDITED INITIAL STATE: Restored historical earnings to "
+            f"{audited_flame:.6f} FLAME based on {wh_consumed:.6f} Wh"
+        )
+
 def submit_telemetry():
     try:
         node_id = get_dynamic_node_id()
@@ -115,6 +133,9 @@ def run_pulse_loop(interval_seconds=5.0):
     node_id = get_dynamic_node_id()
     print(f"[INIT] FlameChain Node Initialized: {node_id}")
 
+    # Boot verification and state audit
+    audit_initial_state()
+
     while True:
         try:
             current_time = time.time()
@@ -171,6 +192,7 @@ def run_pulse_loop(interval_seconds=5.0):
         time.sleep(interval_seconds)
 
 if __name__ == "__main__":
+    audit_initial_state()
     if "--once" in sys.argv:
         submit_telemetry()
     else:
