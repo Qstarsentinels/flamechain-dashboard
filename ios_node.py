@@ -1,202 +1,93 @@
-import os
-import sys
 import json
-import time
-import hashlib
+import os
 import platform
+import time
+import uuid
+import hashlib
 
-NODE_STATE_FILE = "node_state.json"
-GLOBAL_STATE_FILE = "global_network_state.json"
+STATE_FILE = "global_network_state.json"
+TELEMETRY_INTERVAL_SEC = 5
+STALE_THRESHOLD_SEC = 30
 
-WH_RATE_PER_SEC = 0.00003
-FLAME_RATE_PER_SEC = 0.1625
+def generate_hardware_node_id() -> str:
+    """Generate a deterministic, persistent node identity based on system hostname and MAC address."""
+    hostname = platform.node() or "unknown-host"
+    mac_addr = uuid.getnode()
+    hardware_fingerprint = f"{hostname}:{mac_addr}"
+    hash_digest = hashlib.sha256(hardware_fingerprint.encode('utf-8')).hexdigest()[:12]
+    return f"flame-node-{hash_digest}"
 
-LEGACY_STALE_NODES = {
-    "test-node-01",
-    "node_tab_localhost",
-    "ios_ipad_pro_m2_mesh_01",
-    "ipad-validator-node"
-}
-
-def read_json_file(filepath):
-    if not os.path.exists(filepath):
-        return {}
+def get_system_ram_mb() -> int:
+    """Read available system RAM in MB from /proc/meminfo or provide fallback."""
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"[WARN] Read error for {filepath}: {e}")
-        return {}
+        with open('/proc/meminfo', 'r') as f:
+            for line in f:
+                if 'MemTotal' in line:
+                    return int(line.split()[1]) // 1024
+    except Exception:
+        pass
+    return 12288  # Galaxy Tab default baseline profile
 
-def write_json_file(filepath, data):
-    try:
-        tmp_file = f"{filepath}.tmp"
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp_file, filepath)
-        return True
-    except Exception as e:
-        print(f"[ERROR] Write error for {filepath}: {e}")
-        return False
+def read_global_state() -> dict:
+    """Load the current multi-modal mesh network state."""
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"network": "FlameChain-Mainnet", "nodes": {}}
 
-def get_dynamic_node_id():
-    arch = platform.machine() or "arm64"
-    pid = os.getpid()
-    return f"node-{arch}-{pid}"
+def write_global_state(state: dict) -> None:
+    """Atomically write the network state back to disk."""
+    temp_file = f"{STATE_FILE}.tmp"
+    with open(temp_file, 'w') as f:
+        json.dump(state, f, indent=2)
+    os.replace(temp_file, STATE_FILE)
 
-def audit_initial_state():
-    """Verify node_state.json on boot and enforce strict burn logic for unbacked tokens."""
-    local_state = read_json_file(NODE_STATE_FILE)
-    if not local_state:
-        return
-
-    wh_consumed = float(local_state.get("wh_consumed", 0.0))
-    audited_flame = max(0.0, wh_consumed * 5423.126)
+def submit_telemetry(node_id: str) -> None:
+    """Update active node metrics and purge stale nodes inactive for over 30 seconds."""
+    now = time.time()
+    state = read_global_state()
     
-    local_state["flame_minted"] = round(audited_flame, 6)
-    write_json_file(NODE_STATE_FILE, local_state)
-    print(
-        f"[INFO] SUPPLY AUDITED & UNBACKED TOKENS BURNED: Re-aligned FLAME minted to "
-        f"{audited_flame:.6f} based on {wh_consumed:.6f} Wh"
-    )
+    if "nodes" not in state or not isinstance(state["nodes"], dict):
+        state["nodes"] = {}
 
-def submit_telemetry():
-    try:
-        node_id = get_dynamic_node_id()
-        local_state = read_json_file(NODE_STATE_FILE)
+    # 1. Purge stale nodes (> 30 seconds inactive)
+    active_nodes = {}
+    for n_id, n_data in state["nodes"].items():
+        last_seen = n_data.get("last_seen", 0)
+        if (now - last_seen) <= STALE_THRESHOLD_SEC:
+            active_nodes[n_id] = n_data
 
-        architecture = str(local_state.get("architecture", platform.machine() or "arm64"))
-        node_os = str(local_state.get("os", platform.system() or "iOS/Darwin"))
-        system_ram_mb = int(local_state.get("system_ram_mb", 4096))
-        pulse_count = int(local_state.get("pulse_count", 0))
-        wh_consumed = float(local_state.get("wh_consumed", 0.0))
-        flame_minted = float(local_state.get("flame_minted", 0.0))
-        current_time = float(time.time())
-        status = str(local_state.get("status", "ACTIVE"))
+    # 2. Add or update current node telemetry
+    ram_mb = get_system_ram_mb()
+    active_nodes[node_id] = {
+        "node_id": node_id,
+        "platform": platform.platform(),
+        "arch": platform.machine(),
+        "ram_mb": ram_mb,
+        "watt_hours": 45.0,  # Telemetry baseline reading
+        "status": "ACTIVE",
+        "last_seen": now
+    }
 
-        standardized_node_state = {
-            "node_id": node_id,
-            "architecture": architecture,
-            "os": node_os,
-            "system_ram_mb": system_ram_mb,
-            "pulse_count": pulse_count,
-            "wh_consumed": round(wh_consumed, 6),
-            "flame_minted": round(flame_minted, 6),
-            "last_seen": current_time,
-            "timestamp": current_time,
-            "status": status
-        }
+    state["nodes"] = active_nodes
+    state["last_pruned_timestamp"] = int(now)
+    
+    write_global_state(state)
 
-        # Update node_state.json locally
-        write_json_file(NODE_STATE_FILE, standardized_node_state)
-
-        # Update global_network_state.json
-        global_state = read_json_file(GLOBAL_STATE_FILE)
-        if not isinstance(global_state, dict):
-            global_state = {}
-
-        if "nodes" not in global_state or not isinstance(global_state["nodes"], dict):
-            global_state["nodes"] = {}
-
-        # Purge explicitly requested legacy and stale node keys
-        for legacy_key in LEGACY_STALE_NODES:
-            global_state["nodes"].pop(legacy_key, None)
-
-        # Store current active dynamic node state
-        global_state["nodes"][node_id] = standardized_node_state
-
-        # Recalculate aggregate network totals
-        total_wh = 0.0
-        total_flame = 0.0
-        total_ram_mb = 0
-
-        for n_id, n_data in list(global_state["nodes"].items()):
-            if n_id in LEGACY_STALE_NODES:
-                global_state["nodes"].pop(n_id, None)
-                continue
-
-            if isinstance(n_data, dict):
-                total_wh += float(n_data.get("wh_consumed", 0.0))
-                total_flame += float(n_data.get("flame_minted", 0.0))
-                total_ram_mb += int(n_data.get("system_ram_mb", 0))
-
-        global_state["energy_wh"] = round(total_wh, 6)
-        global_state["gross_supply"] = round(total_flame, 6)
-        global_state["combined_mesh_memory_gb"] = round(total_ram_mb / 1024.0, 2)
-        global_state["last_updated"] = current_time
-
-        write_json_file(GLOBAL_STATE_FILE, global_state)
-        return True
-
-    except Exception as e:
-        print(f"[WARN] submit_telemetry non-fatal exception: {e}")
-        return False
-
-def run_pulse_loop(interval_seconds=5.0):
-    node_id = get_dynamic_node_id()
-    print(f"[INIT] FlameChain Node Initialized: {node_id}")
-
-    # Boot verification and state audit
-    audit_initial_state()
-
+def main():
+    node_id = generate_hardware_node_id()
+    print(f"[FlameChain Node] Identity locked: {node_id}")
+    print(f"[FlameChain Node] Monitoring mesh telemetry loop (interval: {TELEMETRY_INTERVAL_SEC}s)...")
+    
     while True:
         try:
-            current_time = time.time()
-            local_state = read_json_file(NODE_STATE_FILE)
+            submit_telemetry(node_id)
+        except Exception as e:
+            print(f"[FlameChain Error] Telemetry update failed: {e}")
+        time.sleep(TELEMETRY_INTERVAL_SEC)
 
-            last_time = float(local_state.get("timestamp", current_time - interval_seconds))
-            delta_time = max(0.001, current_time - last_time)
-
-            delta_wh = delta_time * WH_RATE_PER_SEC
-            delta_flame = delta_time * FLAME_RATE_PER_SEC
-
-            current_pulses = int(local_state.get("pulse_count", 0)) + 1
-            current_wh = float(local_state.get("wh_consumed", 0.0)) + delta_wh
-            current_minted = float(local_state.get("flame_minted", 0.0)) + delta_flame
-            system_ram_mb = int(local_state.get("system_ram_mb", 4096))
-
-            # Compute SHA256 Pulse Hash
-            raw_hash_payload = f"{node_id}:{current_pulses}:{current_time}:{current_wh:.6f}:{current_minted:.6f}"
-            pulse_sha256 = hashlib.sha256(raw_hash_payload.encode("utf-8")).hexdigest()
-
-            # Dynamic Shard Hot-Swap ID
-            shard_id = f"SHARD-0{(current_pulses % 4) + 1}-HOTSWAP-ACTIVE"
-
-            # Print full pulse telemetry diagnostic
-            print(
-                f"[PULSE #{current_pulses}] SHA256: {pulse_sha256[:16]}... | "
-                f"RAM: {system_ram_mb} MB | Wh: {current_wh:.6f} (+{delta_wh:.6f}) | "
-                f"FLAME: {current_minted:.6f} (+{delta_flame:.6f}) | Shard: {shard_id}"
-            )
-
-            updated_state = {
-                "node_id": node_id,
-                "architecture": platform.machine() or "arm64",
-                "os": platform.system() or "iOS/Darwin",
-                "system_ram_mb": system_ram_mb,
-                "pulse_count": current_pulses,
-                "wh_consumed": round(current_wh, 6),
-                "flame_minted": round(current_minted, 6),
-                "last_seen": current_time,
-                "timestamp": current_time,
-                "status": "ACTIVE_PROOF_OF_WATT"
-            }
-
-            write_json_file(NODE_STATE_FILE, updated_state)
-
-            try:
-                submit_telemetry()
-            except Exception as telemetry_err:
-                print(f"[WARN] Telemetry submit failed: {telemetry_err}")
-
-        except Exception as loop_err:
-            print(f"[ERROR] Pulse execution loop exception: {loop_err}")
-
-        time.sleep(interval_seconds)
-
-if __name__ == "__main__":
-    audit_initial_state()
-    if "--once" in sys.argv:
-        submit_telemetry()
-    else:
-        run_pulse_loop()
+if __name__ == '__main__':
+    main()
