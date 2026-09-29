@@ -1,16 +1,107 @@
 #!/usr/bin/env python3
 """
-FlameChain Cross-Platform Mesh Node
-Handles multi-modal model fragment execution, token minting relative to 
-Watt-Hour consumption, and dynamic sharding.
+FlameChain Zero-Dependency Cross-Platform Mesh Node
+Runs natively on edge devices (Termux, iOS, macOS, Android) with zero mandatory pip dependencies.
 """
 
 import argparse
+import json
+import os
+import subprocess
 import sys
 import time
-from typing import Dict, Any, List
-from pydantic import BaseModel
-from core.telemetry.hardware_oracle import TermuxHardwareOracle
+from typing import Dict, Any, List, Optional
+
+# --- Zero-Dependency Pydantic Fallback Wrapper ---
+try:
+    from pydantic import BaseModel
+except ImportError:
+    class BaseModel:
+        def __init__(self, **kwargs: Any) -> None:
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+        def model_dump_json(self, indent: Optional[int] = None) -> str:
+            def default_serializer(o: Any) -> Any:
+                if hasattr(o, '__dict__'):
+                    return o.__dict__
+                return str(o)
+            return json.dumps(self.__dict__, indent=indent, default=default_serializer)
+
+        def dict(self) -> Dict[str, Any]:
+            return self.__dict__
+
+# --- Zero-Dependency Telemetry Fallback Oracle ---
+try:
+    from core.telemetry.hardware_oracle import TermuxHardwareOracle
+except ImportError:
+    class TelemetryPayload(BaseModel):
+        timestamp: float
+        total_ram_mb: float
+        available_ram_mb: float
+        ram_utilization_pct: float
+        battery_percentage: float
+        battery_temperature_c: float
+        power_draw_watts: float
+        voltage_mv: float
+        current_ma: float
+
+    class TermuxHardwareOracle:
+        def __init__(self, nominal_voltage_v: float = 3.85):
+            self.nominal_voltage = nominal_voltage_v
+
+        def _get_battery_status(self) -> Dict[str, Any]:
+            try:
+                result = subprocess.run(
+                    ["termux-battery-status"],
+                    capture_output=True,
+                    text=True,
+                    timeout=2
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    return json.loads(result.stdout)
+            except Exception:
+                pass
+            return {"percentage": 100, "temperature": 25.0, "current": 0, "voltage": 3800}
+
+        def collect_telemetry(self) -> TelemetryPayload:
+            bat = self._get_battery_status()
+            raw_current = abs(float(bat.get("current", 0)))
+            current_ma = raw_current / 1000.0 if raw_current > 10000 else raw_current
+            voltage_mv = float(bat.get("voltage", 3800))
+            power_watts = (voltage_mv / 1000.0) * (current_ma / 1000.0)
+
+            # Fallback memory estimation without psutil
+            total_ram_mb = 4096.0
+            available_ram_mb = 2048.0
+            try:
+                with open("/proc/meminfo", "r") as f:
+                    lines = f.readlines()
+                    mem_info = {}
+                    for line in lines:
+                        parts = line.split(":")
+                        if len(parts) == 2:
+                            key = parts[0].strip()
+                            val = parts[1].split()[0].strip()
+                            mem_info[key] = int(val)
+                    if "MemTotal" in mem_info:
+                        total_ram_mb = mem_info["MemTotal"] / 1024.0
+                    if "MemAvailable" in mem_info:
+                        available_ram_mb = mem_info["MemAvailable"] / 1024.0
+            except Exception:
+                pass
+
+            return TelemetryPayload(
+                timestamp=time.time(),
+                total_ram_mb=round(total_ram_mb, 2),
+                available_ram_mb=round(available_ram_mb, 2),
+                ram_utilization_pct=round(((total_ram_mb - available_ram_mb) / total_ram_mb) * 100, 2),
+                battery_percentage=float(bat.get("percentage", 100)),
+                battery_temperature_c=float(bat.get("temperature", 25.0)),
+                power_draw_watts=round(power_watts, 4),
+                voltage_mv=voltage_mv,
+                current_ma=current_ma
+            )
 
 
 class ModelShardConfig(BaseModel):
@@ -18,7 +109,7 @@ class ModelShardConfig(BaseModel):
     model_name: str
     allocated_ram_mb: float
     precision: str = "fp16"
-    layer_range: List[int]
+    layer_range: List[int] = [0, 16]
 
 
 class ExecutionProof(BaseModel):
@@ -40,7 +131,7 @@ class AppleMeshNode:
 
     def register_shard(self, shard: ModelShardConfig) -> None:
         self.shards[shard.shard_id] = shard
-        print(f"[Shard Registry] Loaded Shard {shard.shard_id} ({shard.model_name} Layers {shard.layer_range})")
+        print(f"[Shard Registry] Loaded Shard {shard.shard_id} ({shard.model_name} Layers {getattr(shard, 'layer_range', [0,16])})")
 
     def execute_shard_inference(self, shard_id: str, input_tokens: int) -> ExecutionProof:
         if shard_id not in self.shards:
@@ -65,7 +156,7 @@ class AppleMeshNode:
             tokens_processed=input_tokens,
             execution_time_sec=round(execution_time, 4),
             watt_hours_consumed=round(watt_hours, 6),
-            ram_used_mb=telemetry_end.total_ram_mb - telemetry_end.available_ram_mb,
+            ram_used_mb=round(telemetry_end.total_ram_mb - telemetry_end.available_ram_mb, 2),
             flame_minted=round(flame_minted, 6)
         )
 
