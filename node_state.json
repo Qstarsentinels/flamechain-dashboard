@@ -1,10 +1,10 @@
 {
   "node_id": "ipad-edge-alpha-01",
   "node_type": "VALIDATOR",
-  "watt_hours": 0.6173999999999674,
-  "flame_tokens": 317.65504531245716,
-  "total_wh_minted": 0.6173999999999674,
-  "total_flame_earnings": 317.65504531245716,
+  "watt_hours": 0.6823499999999603,
+  "flame_tokens": 339.34733046870224,
+  "total_wh_minted": 0.6823499999999603,
+  "total_flame_earnings": 339.34733046870224,
   "available_ram_mb": 3420,
   "ram_allocated_mb": 3420,
   "active_shards": [
