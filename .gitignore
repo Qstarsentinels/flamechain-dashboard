@@ -1,0 +1,23 @@
+# FlameChain Volatile Storage Matrix & Telemetry Exclusions
+storage/
+logs/
+*.log
+*.json
+*.cache
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+*.db
+*.sqlite
+*.bin
+*.pt
+*.onnx
+
+# Termux/Android Runtime Artifacts
+.termux/
+*.tmp
+models/
+*.gguf
+shards/
+*.pid
