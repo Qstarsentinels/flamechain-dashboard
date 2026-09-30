@@ -1,0 +1,11 @@
+{
+  "node_id": "flame-val-7f004869d4d62135",
+  "hardware_profile": {
+    "primary_device": "Galaxy Tab [Kernel: 5.4.249-qgki-31053672-abX210XXU6DYE2]",
+    "peer_handshake_target": "iPhone Edge Validator",
+    "rated_battery_wh": 28.9,
+    "ram_allocation_mb": 4096,
+    "hardware_attestation": "ACTIVE_SECURE_ELEMENT"
+  },
+  "created_utc": "2026-09-30 18:28:38 UTC"
+}

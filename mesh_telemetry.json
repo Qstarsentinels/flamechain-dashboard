@@ -1,16 +1,28 @@
 {
   "singularity_currency": "FlameChain (FLAME)",
-  "node_id": "node_5e2e9036",
-  "timestamp_utc": "2026-09-30 18:27:01 UTC",
-  "uptime_seconds": 2198,
+  "chain_genesis": {
+    "chain_id": "flamechain-singularity-v1",
+    "genesis_hash": "0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+    "consensus": "Proof-of-Watt-Hour-RAM (PoW-RAM)"
+  },
+  "node_identity": {
+    "node_id": "flame-val-7f004869d4d62135",
+    "primary_device": "Galaxy Tab [Kernel: 5.4.249-qgki-31053672-abX210XXU6DYE2]",
+    "peer_handshake_target": "iPhone Edge Validator",
+    "hardware_attestation": "ACTIVE_SECURE_ELEMENT"
+  },
+  "timestamp_utc": "2026-09-30 18:28:46 UTC",
+  "uptime_seconds": 5,
   "active_http_port": 9998,
   "tokenomics": {
-    "minted_flame_balance": 1015.2622,
-    "backing_asset": "Watt-Hours + System RAM"
+    "minted_flame_balance": 1000.0347,
+    "backing_asset": "Watt-Hours + System RAM",
+    "total_shard_bytes_verified": 0
   },
   "hardware_metrics": {
     "watt_hours_remaining": 7.51,
-    "allocated_ram_mb": 646
+    "rated_battery_wh": 28.9,
+    "allocated_ram_mb": 605
   },
   "mesh_network": {
     "active_peer_count": 0,
@@ -26,8 +38,8 @@
     "gossip_sync_shards": 0
   },
   "git_sync_telemetry": {
-    "last_sync_utc": "2026-09-30 18:18:37 UTC",
-    "sync_count": 5,
-    "last_status": "SUCCESS_PUSHED"
+    "last_sync_utc": "NEVER",
+    "sync_count": 0,
+    "last_status": "INITIALIZING"
   }
 }
