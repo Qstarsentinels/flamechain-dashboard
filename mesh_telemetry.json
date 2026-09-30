@@ -2,13 +2,13 @@
   "singularity_currency": "FlameChain (FLAME)",
   "network_id": "flamechain-singularity-v1",
   "consensus_protocol": "Proof-of-Watt-Hour-RAM (PoW-RAM)",
-  "timestamp_utc": "2026-09-30 19:13:39 UTC",
+  "timestamp_utc": "2026-09-30 20:53:34 UTC",
   "network_totals": {
-    "total_network_minted_flame": 2056.8853,
-    "total_network_watt_hours": 21.07,
-    "total_network_ram_mb": 3689,
+    "total_network_minted_flame": 2203.9822,
+    "total_network_watt_hours": 20.78,
+    "total_network_ram_mb": 3785,
     "active_validator_nodes_count": 2,
-    "total_mesh_shards": 5
+    "total_mesh_shards": 10
   },
   "validator_nodes_registry": {
     "iphone-val-c7a6af013fd1": {
@@ -16,10 +16,10 @@
       "hardware_model": "Android Galaxy Tab S9 (Termux)",
       "status": "ONLINE",
       "ip_endpoint": "127.0.0.1:9998",
-      "minted_flame": 1056.8853,
-      "watt_hours_remaining": 6.07,
-      "allocated_ram_mb": 617,
-      "shards_held": 4
+      "minted_flame": 1203.9822,
+      "watt_hours_remaining": 5.78,
+      "allocated_ram_mb": 713,
+      "shards_held": 9
     },
     "iphone_edge_val_01": {
       "device_role": "Secondary Edge Validator",
