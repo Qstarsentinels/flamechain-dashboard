@@ -1,36 +1,33 @@
 {
   "singularity_currency": "FlameChain (FLAME)",
-  "chain_genesis": {
-    "chain_id": "flamechain-singularity-v1",
-    "genesis_hash": "0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
-    "consensus": "Proof-of-Watt-Hour-RAM (PoW-RAM)"
+  "network_id": "flamechain-singularity-v1",
+  "consensus_protocol": "Proof-of-Watt-Hour-RAM (PoW-RAM)",
+  "timestamp_utc": "2026-09-30 18:32:14 UTC",
+  "network_totals": {
+    "total_network_minted_flame": 1000.0,
+    "total_network_watt_hours": 7.22,
+    "total_network_ram_mb": 678,
+    "active_validator_nodes_count": 1,
+    "total_mesh_shards": 0
   },
-  "node_identity": {
+  "validator_nodes_registry": {
+    "flame-val-7f004869d4d62135": {
+      "device_role": "Primary Mainnet Validator Core",
+      "hardware_model": "Galaxy Tab [Kernel: 5.4.249-qgki-31053672-abX210XXU6DYE2]",
+      "status": "ONLINE",
+      "ip_endpoint": "192.168.7.174:9999",
+      "minted_flame": 1000.0,
+      "watt_hours_remaining": 7.22,
+      "allocated_ram_mb": 678,
+      "shards_held": 0
+    }
+  },
+  "local_node_stats": {
     "node_id": "flame-val-7f004869d4d62135",
-    "primary_device": "Galaxy Tab [Kernel: 5.4.249-qgki-31053672-abX210XXU6DYE2]",
-    "peer_handshake_target": "iPhone Edge Validator",
-    "hardware_attestation": "ACTIVE_SECURE_ELEMENT"
-  },
-  "timestamp_utc": "2026-09-30 18:28:46 UTC",
-  "uptime_seconds": 5,
-  "active_http_port": 9998,
-  "tokenomics": {
-    "minted_flame_balance": 1000.0347,
-    "backing_asset": "Watt-Hours + System RAM",
-    "total_shard_bytes_verified": 0
-  },
-  "hardware_metrics": {
-    "watt_hours_remaining": 7.51,
-    "rated_battery_wh": 28.9,
-    "allocated_ram_mb": 605
-  },
-  "mesh_network": {
-    "active_peer_count": 0,
-    "peer_nodes": {}
-  },
-  "storage_engine": {
-    "local_shards_persisted": 0,
-    "shards": []
+    "uptime_seconds": 0,
+    "active_http_port": 9999,
+    "local_shards": [],
+    "local_shard_bytes": 0
   },
   "airwave_telemetry": {
     "ble_shards_rcvd": 0,
