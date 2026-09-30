@@ -6,17 +6,17 @@
     "genesis_hash": "0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
     "initial_base_reward": 1000.0
   },
-  "timestamp_utc": "2026-09-30 23:30:57 UTC",
+  "timestamp_utc": "2026-09-30 23:31:33 UTC",
   "cryptographic_attestation": {
     "audit_status": "RECONCILED_AND_VERIFIED",
     "merkle_root_sha256": "9cbc75fd7e4306d8d629f5709f30b66d412309e0bf386436097d02a73693fa0d",
-    "audit_attestation_signature": "0x001133d90383e6ba8d412170c60d5420f801995470597d40af8df9aaecc01a36",
+    "audit_attestation_signature": "0xb2c9e79ce358c1b57d87dd7c7ae14ec51565014fc40c662a03b12e76fbd10a23",
     "total_shard_bytes_audited": 5247702
   },
   "network_totals": {
-    "total_network_minted_flame": 2349.5019,
+    "total_network_minted_flame": 2349.7493,
     "total_network_watt_hours": 17.91,
-    "total_network_ram_mb": 3720,
+    "total_network_ram_mb": 3728,
     "active_validator_nodes_count": 2,
     "total_mesh_shards": 27
   },
@@ -26,9 +26,9 @@
       "hardware_model": "iPhone Edge Validator Node (A17 Pro / iOS Mesh Core)",
       "status": "ONLINE",
       "ip_endpoint": "127.0.0.1:9998",
-      "minted_flame": 1336.9936,
+      "minted_flame": 1337.241,
       "watt_hours_remaining": 4.91,
-      "allocated_ram_mb": 648,
+      "allocated_ram_mb": 656,
       "shards_held": 26
     },
     "iphone-val-a17-pro": {
