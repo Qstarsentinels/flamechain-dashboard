@@ -2,11 +2,11 @@
   "singularity_currency": "FlameChain (FLAME)",
   "network_id": "flamechain-singularity-v1",
   "consensus_protocol": "Proof-of-Watt-Hour-RAM (PoW-RAM)",
-  "timestamp_utc": "2026-09-30 18:45:46 UTC",
+  "timestamp_utc": "2026-09-30 18:47:31 UTC",
   "network_totals": {
-    "total_network_minted_flame": 1000.0,
+    "total_network_minted_flame": 1006.4005,
     "total_network_watt_hours": 6.65,
-    "total_network_ram_mb": 603,
+    "total_network_ram_mb": 570,
     "active_validator_nodes_count": 1,
     "total_mesh_shards": 0
   },
@@ -15,17 +15,17 @@
       "device_role": "Primary Mainnet Validator Core",
       "hardware_model": "Galaxy Tab [Kernel: 5.4.249-qgki-31053672-abX210XXU6DYE2]",
       "status": "ONLINE",
-      "ip_endpoint": "192.168.7.174:9999",
-      "minted_flame": 1000.0,
+      "ip_endpoint": "192.168.7.174:9998",
+      "minted_flame": 1006.4005,
       "watt_hours_remaining": 6.65,
-      "allocated_ram_mb": 603,
+      "allocated_ram_mb": 570,
       "shards_held": 0
     }
   },
   "local_node_stats": {
     "node_id": "flame-val-7f004869d4d62135",
-    "uptime_seconds": 0,
-    "active_http_port": 9999,
+    "uptime_seconds": 922,
+    "active_http_port": 9998,
     "local_shards": [],
     "local_shard_bytes": 0
   },
@@ -35,8 +35,8 @@
     "gossip_sync_shards": 0
   },
   "git_sync_telemetry": {
-    "last_sync_utc": "NEVER",
-    "sync_count": 0,
-    "last_status": "INITIALIZING"
+    "last_sync_utc": "2026-09-30 18:39:26 UTC",
+    "sync_count": 2,
+    "last_status": "SUCCESS_PUSHED"
   }
 }
