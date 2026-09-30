@@ -4,9 +4,9 @@
   "consensus_protocol": "Proof-of-Watt-Hour-RAM (PoW-RAM)",
   "timestamp_utc": "2026-09-30 18:32:14 UTC",
   "network_totals": {
-    "total_network_minted_flame": 1000.0,
+    "total_network_minted_flame": 1000.0347,
     "total_network_watt_hours": 7.22,
-    "total_network_ram_mb": 678,
+    "total_network_ram_mb": 708,
     "active_validator_nodes_count": 1,
     "total_mesh_shards": 0
   },
@@ -15,17 +15,17 @@
       "device_role": "Primary Mainnet Validator Core",
       "hardware_model": "Galaxy Tab [Kernel: 5.4.249-qgki-31053672-abX210XXU6DYE2]",
       "status": "ONLINE",
-      "ip_endpoint": "192.168.7.174:9999",
-      "minted_flame": 1000.0,
+      "ip_endpoint": "192.168.7.174:9998",
+      "minted_flame": 1000.0347,
       "watt_hours_remaining": 7.22,
-      "allocated_ram_mb": 678,
+      "allocated_ram_mb": 708,
       "shards_held": 0
     }
   },
   "local_node_stats": {
     "node_id": "flame-val-7f004869d4d62135",
-    "uptime_seconds": 0,
-    "active_http_port": 9999,
+    "uptime_seconds": 5,
+    "active_http_port": 9998,
     "local_shards": [],
     "local_shard_bytes": 0
   },
