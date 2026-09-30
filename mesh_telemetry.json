@@ -2,34 +2,74 @@
   "singularity_currency": "FlameChain (FLAME)",
   "network_id": "flamechain-singularity-v1",
   "consensus_protocol": "Proof-of-Watt-Hour-RAM (PoW-RAM)",
-  "timestamp_utc": "2026-09-30 23:09:30 UTC",
+  "timestamp_utc": "2026-09-30 23:10:00 UTC",
   "network_totals": {
-    "total_network_minted_flame": 2328.0576,
-    "total_network_watt_hours": 20.2,
-    "total_network_ram_mb": 3608,
-    "active_validator_nodes_count": 2,
-    "total_mesh_shards": 27
+    "total_network_minted_flame": 1328.2846,
+    "total_network_watt_hours": 2.34,
+    "total_network_ram_mb": 573,
+    "active_validator_nodes_count": 1,
+    "total_mesh_shards": 26
   },
   "validator_nodes_registry": {
     "iphone-val-c7a6af013fd1": {
       "device_role": "Primary Mainnet Validator Core",
-      "hardware_model": "Android Galaxy Tab S9 (Termux)",
+      "hardware_model": "iPhone Edge Validator Node (A17 Pro / iOS Mesh Core)",
       "status": "ONLINE",
-      "ip_endpoint": "127.0.0.1:9998",
-      "minted_flame": 1328.0576,
-      "watt_hours_remaining": 5.2,
-      "allocated_ram_mb": 536,
-      "shards_held": 26
-    },
-    "iphone_edge_val_01": {
-      "device_role": "Secondary Edge Validator",
-      "hardware_model": "iPhone Edge Validator",
-      "status": "AIRWAVE_MESH",
-      "ip_endpoint": "192.168.1.105:9999",
-      "minted_flame": 1000.0,
-      "watt_hours_remaining": 15.0,
-      "allocated_ram_mb": 3072,
-      "shards_held": 1
+      "ip_endpoint": "172.20.10.2:9998",
+      "minted_flame": 1328.2846,
+      "watt_hours_remaining": 2.34,
+      "allocated_ram_mb": 573,
+      "shards_held": 26,
+      "code_sha256": "abf6a03d81d3195c"
     }
+  },
+  "local_node_stats": {
+    "node_id": "iphone-val-c7a6af013fd1",
+    "uptime_seconds": 389,
+    "active_http_port": 9998,
+    "active_interface_ip": "172.20.10.2",
+    "code_sha256": "abf6a03d81d3195c782bd0c3d210d5d927db21977d0dffe70a56366a9af13584",
+    "local_shards": [
+      "shard_retroactive_1790794872",
+      "shard_retroactive_1790795181",
+      "shard_retroactive_1790795378",
+      "shard_retroactive_1790795463",
+      "shard_retroactive_1790796133",
+      "shard_retroactive_1790796497",
+      "shard_retroactive_1790797877",
+      "shard_retroactive_1790797999",
+      "shard_retroactive_1790801607",
+      "shard_retroactive_1790802344",
+      "shard_retroactive_1790803006",
+      "shard_retroactive_1790803033",
+      "shard_retroactive_1790804404",
+      "shard_retroactive_1790805732",
+      "shard_retroactive_1790806415",
+      "shard_retroactive_1790806932",
+      "shard_retroactive_1790806955",
+      "shard_retroactive_1790808134",
+      "shard_retroactive_1790808746",
+      "shard_retroactive_1790808888",
+      "shard_retroactive_1790808955",
+      "shard_retroactive_1790809064",
+      "shard_retroactive_1790809143",
+      "shard_retroactive_1790809168",
+      "shard_retroactive_1790809303",
+      "shard_retroactive_1790809325"
+    ],
+    "local_shard_bytes": 4822
+  },
+  "airwave_telemetry": {
+    "ble_shards_rcvd": 0,
+    "rf_shards_rcvd": 0,
+    "gossip_sync_shards": 0,
+    "retroactive_mints": 0,
+    "self_updates_applied": 0,
+    "subnets_scanned": 12
+  },
+  "git_sync_telemetry": {
+    "last_sync_utc": "2026-09-30 23:03:39 UTC",
+    "sync_count": 1,
+    "last_status": "SUCCESS_PUSHED"
   }
 }
