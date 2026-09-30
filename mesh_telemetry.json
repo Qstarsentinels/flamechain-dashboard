@@ -2,74 +2,44 @@
   "singularity_currency": "FlameChain (FLAME)",
   "network_id": "flamechain-singularity-v1",
   "consensus_protocol": "Proof-of-Watt-Hour-RAM (PoW-RAM)",
-  "timestamp_utc": "2026-09-30 23:15:05 UTC",
+  "chain_genesis": {
+    "genesis_hash": "0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+    "initial_base_reward": 1000.0
+  },
+  "timestamp_utc": "2026-09-30 23:15:36 UTC",
+  "cryptographic_attestation": {
+    "audit_status": "RECONCILED_AND_VERIFIED",
+    "merkle_root_sha256": "9cbc75fd7e4306d8d629f5709f30b66d412309e0bf386436097d02a73693fa0d",
+    "audit_attestation_signature": "0x76d46b7a611bae58199a6911fc5413ae46a0d6db122ac6e2439e6b8b9612bf6c",
+    "total_shard_bytes_audited": 5247702
+  },
   "network_totals": {
-    "total_network_minted_flame": 1330.3961,
-    "total_network_watt_hours": 2.21,
-    "total_network_ram_mb": 660,
-    "active_validator_nodes_count": 1,
-    "total_mesh_shards": 26
+    "total_network_minted_flame": 2343.1034,
+    "total_network_watt_hours": 17.91,
+    "total_network_ram_mb": 3664,
+    "active_validator_nodes_count": 2,
+    "total_mesh_shards": 27
   },
   "validator_nodes_registry": {
     "iphone-val-c7a6af013fd1": {
       "device_role": "Primary Mainnet Validator Core",
       "hardware_model": "iPhone Edge Validator Node (A17 Pro / iOS Mesh Core)",
       "status": "ONLINE",
-      "ip_endpoint": "172.20.10.2:9998",
-      "minted_flame": 1330.3961,
-      "watt_hours_remaining": 2.21,
-      "allocated_ram_mb": 660,
-      "shards_held": 26,
-      "code_sha256": "abf6a03d81d3195c"
+      "ip_endpoint": "127.0.0.1:9998",
+      "minted_flame": 1330.5951,
+      "watt_hours_remaining": 4.91,
+      "allocated_ram_mb": 592,
+      "shards_held": 26
+    },
+    "iphone-val-a17-pro": {
+      "device_role": "Secondary Edge Validator",
+      "hardware_model": "iPhone Edge Validator (A17 Pro / iOS Mesh Core)",
+      "status": "VERIFIED_AIRWAVE_MESH",
+      "ip_endpoint": "192.168.1.105:9999",
+      "minted_flame": 1012.5083,
+      "watt_hours_remaining": 13.0,
+      "allocated_ram_mb": 3072,
+      "shards_held": 1
     }
-  },
-  "local_node_stats": {
-    "node_id": "iphone-val-c7a6af013fd1",
-    "uptime_seconds": 693,
-    "active_http_port": 9998,
-    "active_interface_ip": "172.20.10.2",
-    "code_sha256": "abf6a03d81d3195c782bd0c3d210d5d927db21977d0dffe70a56366a9af13584",
-    "local_shards": [
-      "shard_retroactive_1790794872",
-      "shard_retroactive_1790795181",
-      "shard_retroactive_1790795378",
-      "shard_retroactive_1790795463",
-      "shard_retroactive_1790796133",
-      "shard_retroactive_1790796497",
-      "shard_retroactive_1790797877",
-      "shard_retroactive_1790797999",
-      "shard_retroactive_1790801607",
-      "shard_retroactive_1790802344",
-      "shard_retroactive_1790803006",
-      "shard_retroactive_1790803033",
-      "shard_retroactive_1790804404",
-      "shard_retroactive_1790805732",
-      "shard_retroactive_1790806415",
-      "shard_retroactive_1790806932",
-      "shard_retroactive_1790806955",
-      "shard_retroactive_1790808134",
-      "shard_retroactive_1790808746",
-      "shard_retroactive_1790808888",
-      "shard_retroactive_1790808955",
-      "shard_retroactive_1790809064",
-      "shard_retroactive_1790809143",
-      "shard_retroactive_1790809168",
-      "shard_retroactive_1790809303",
-      "shard_retroactive_1790809325"
-    ],
-    "local_shard_bytes": 4822
-  },
-  "airwave_telemetry": {
-    "ble_shards_rcvd": 0,
-    "rf_shards_rcvd": 0,
-    "gossip_sync_shards": 0,
-    "retroactive_mints": 0,
-    "self_updates_applied": 0,
-    "subnets_scanned": 24
-  },
-  "git_sync_telemetry": {
-    "last_sync_utc": "2026-09-30 23:10:04 UTC",
-    "sync_count": 2,
-    "last_status": "SUCCESS_PUSHED"
   }
 }
