@@ -1,11 +1,11 @@
 {
-  "node_id": "flame-val-7f004869d4d62135",
+  "node_id": "iphone-val-c7a6af013fd1",
   "hardware_profile": {
-    "primary_device": "Galaxy Tab [Kernel: 5.4.249-qgki-31053672-abX210XXU6DYE2]",
-    "peer_handshake_target": "iPhone Edge Validator",
-    "rated_battery_wh": 28.9,
-    "ram_allocation_mb": 4096,
-    "hardware_attestation": "ACTIVE_SECURE_ELEMENT"
+    "primary_device": "iPhone Edge Validator Node (A17 Pro / iOS Mesh Core)",
+    "peer_handshake_target": "Android Galaxy Tab S9 Core",
+    "rated_battery_wh": 13.0,
+    "allocated_ram_mb": 3072,
+    "hardware_attestation": "ACTIVE_APPLE_SECURE_ENCLAVE"
   },
-  "created_utc": "2026-09-30 18:28:38 UTC"
+  "created_utc": "2026-09-30 19:02:32 UTC"
 }

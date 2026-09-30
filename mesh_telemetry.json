@@ -2,32 +2,37 @@
   "singularity_currency": "FlameChain (FLAME)",
   "network_id": "flamechain-singularity-v1",
   "consensus_protocol": "Proof-of-Watt-Hour-RAM (PoW-RAM)",
-  "timestamp_utc": "2026-09-30 19:02:04 UTC",
+  "chain_genesis": {
+    "chain_id": "flamechain-singularity-v1",
+    "genesis_hash": "0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+    "consensus": "Proof-of-Watt-Hour-RAM (PoW-RAM)"
+  },
+  "timestamp_utc": "2026-09-30 19:02:32 UTC",
   "network_totals": {
-    "total_network_minted_flame": 2013.1,
-    "total_network_watt_hours": 21.36,
-    "total_network_ram_mb": 3587,
+    "total_network_minted_flame": 2025.0166,
+    "total_network_watt_hours": 41.9,
+    "total_network_ram_mb": 7168,
     "active_validator_nodes_count": 2,
     "total_mesh_shards": 2
   },
   "validator_nodes_registry": {
-    "flame-val-7f004869d4d62135": {
+    "flame-val-019d6689c085ae16": {
       "device_role": "Primary Mainnet Validator Core",
-      "hardware_model": "Android Galaxy Tab S9 (Termux)",
+      "hardware_model": "Android Galaxy Tab S9 (Termux Core)",
       "status": "ONLINE",
-      "ip_endpoint": "127.0.0.1:9998",
-      "minted_flame": 1013.1,
-      "watt_hours_remaining": 6.36,
-      "allocated_ram_mb": 515,
+      "ip_endpoint": "127.0.0.1:9999",
+      "minted_flame": 1012.5083,
+      "watt_hours_remaining": 28.9,
+      "allocated_ram_mb": 4096,
       "shards_held": 1
     },
-    "iphone_edge_val_01": {
+    "iphone-val-c7a6af013fd1": {
       "device_role": "Secondary Edge Validator",
-      "hardware_model": "iPhone Edge Validator",
-      "status": "AIRWAVE_MESH",
+      "hardware_model": "iPhone Edge Validator Node (A17 Pro / iOS Mesh Core)",
+      "status": "ONLINE",
       "ip_endpoint": "192.168.1.105:9999",
-      "minted_flame": 1000.0,
-      "watt_hours_remaining": 15.0,
+      "minted_flame": 1012.5083,
+      "watt_hours_remaining": 13.0,
       "allocated_ram_mb": 3072,
       "shards_held": 1
     }
