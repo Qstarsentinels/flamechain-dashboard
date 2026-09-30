@@ -1,16 +1,16 @@
 {
   "singularity_currency": "FlameChain (FLAME)",
   "node_id": "node_5e2e9036",
-  "timestamp_utc": "2026-09-30 18:12:11 UTC",
-  "uptime_seconds": 1308,
+  "timestamp_utc": "2026-09-30 18:18:35 UTC",
+  "uptime_seconds": 1692,
   "active_http_port": 9998,
   "tokenomics": {
-    "minted_flame_balance": 1009.0831,
+    "minted_flame_balance": 1011.749,
     "backing_asset": "Watt-Hours + System RAM"
   },
   "hardware_metrics": {
     "watt_hours_remaining": 7.8,
-    "allocated_ram_mb": 645
+    "allocated_ram_mb": 600
   },
   "mesh_network": {
     "active_peer_count": 0,
@@ -26,8 +26,8 @@
     "gossip_sync_shards": 0
   },
   "git_sync_telemetry": {
-    "last_sync_utc": "2026-09-30 18:06:19 UTC",
-    "sync_count": 3,
+    "last_sync_utc": "2026-09-30 18:12:13 UTC",
+    "sync_count": 4,
     "last_status": "PUSH_DEFERRED: To https://github.com/QstarSentinels/flamechain-"
   }
 }
