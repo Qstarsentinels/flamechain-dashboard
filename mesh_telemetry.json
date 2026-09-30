@@ -2,11 +2,11 @@
   "singularity_currency": "FlameChain (FLAME)",
   "network_id": "flamechain-singularity-v1",
   "consensus_protocol": "Proof-of-Watt-Hour-RAM (PoW-RAM)",
-  "timestamp_utc": "2026-09-30 18:50:32 UTC",
+  "timestamp_utc": "2026-09-30 18:51:35 UTC",
   "network_totals": {
     "total_network_minted_flame": 1000.0,
     "total_network_watt_hours": 6.65,
-    "total_network_ram_mb": 590,
+    "total_network_ram_mb": 495,
     "active_validator_nodes_count": 1,
     "total_mesh_shards": 0
   },
@@ -18,7 +18,7 @@
       "ip_endpoint": "192.168.7.174:9999",
       "minted_flame": 1000.0,
       "watt_hours_remaining": 6.65,
-      "allocated_ram_mb": 590,
+      "allocated_ram_mb": 495,
       "shards_held": 0,
       "code_sha256": "226b2d7edcb09df8"
     }
