@@ -1,0 +1,13 @@
+{
+    "mesh_id": "flamechain-termux-mesh-01",
+    "p2p_enabled": true,
+    "listen_ports": [
+        9998,
+        9999
+    ],
+    "max_mesh_shards": 16,
+    "circuit_breaker": {
+        "max_retries": 3,
+        "backoff_base": 1.5
+    }
+}

@@ -21,3 +21,8 @@ models/
 *.gguf
 shards/
 *.pid
+!mesh_telemetry.json
+!shard_state.json
+!node_telemetry.json
+!mesh_config.json
+!index.html
