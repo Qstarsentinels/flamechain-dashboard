@@ -6,11 +6,11 @@
     "genesis_hash": "0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
     "initial_base_reward": 1000.0
   },
-  "timestamp_utc": "2026-10-01 05:28:53 UTC",
+  "timestamp_utc": "2026-10-01 05:29:28 UTC",
   "cryptographic_attestation": {
     "audit_status": "RECONCILED_AND_VERIFIED",
     "merkle_root_sha256": "9cbc75fd7e4306d8d629f5709f30b66d412309e0bf386436097d02a73693fa0d",
-    "audit_attestation_signature": "0x64ffa338017e79bcc147b6ce8b9f6f08a8b0aa975d39e1cb27e1485b79e090a6",
+    "audit_attestation_signature": "0x985c68ac6e03d075f1604f9a7e1fbdfdb78fb736ebcd467f2ba4a463f09e0b5b",
     "total_shard_bytes_audited": 5247702
   },
   "network_totals": {
